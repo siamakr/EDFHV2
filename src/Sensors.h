@@ -11,7 +11,7 @@
 #include <Math.h>
 #include <BasicLinearAlgebra.h>
 #include <stdint.h>
-#include "Constants.h"
+#include "Config.h"
 
 using namespace BLA;
 

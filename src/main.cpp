@@ -51,17 +51,17 @@ void setup() {
    //control.act.zero_servos();
    //control.act.zero_rw();
   #endif
-  //control.act.init_servos();
+  control.act.init_servos();
 
   //--- Initialize Sensors ---//
-    sensor.flow_init();
-    sensor.lidar_init();
-    sensor.fsm_init();
+  sensor.flow_init();
+  sensor.lidar_init();
+  sensor.fsm_init();
   //--- Initialize Sensors ---//
 
   //--- Initialize initial coniditions of flight and set state machine start ---//
-    control.set_reference(SETPOINT_Z, 0.500f);
-    control.set_reference(SETPOINT_YAW, d2r*60.00);
+  control.set_reference(SETPOINT_Z, 0.500f);
+  control.set_reference(SETPOINT_YAW, d2r*60.00);
   //--- Initialize initial coniditions of flight and set state machine start ---//
 
   control.status = CONTROL_STATUS_IMU_CALIBRATION;
@@ -366,8 +366,7 @@ void print_control_imu(void){
 
 }
 
-void print_control_imu_estimater(void)
-{
+void print_control_imu_estimater(void){
   char text[280];
   //              Roll  RollSP pitch  pitchSP  yaw       gx      gy    gz        ax    ay      az        cdax   cdaxx   pwmx   cday   cdayy  pwmy  Tm    pwmedf
   sprintf(text, "%0.5f, %0.5f, %0.5f, \t  %0.5f, %0.5f,     \t %0.5f, %0.5f,    \t  %0.5f, %i,  \t  ",

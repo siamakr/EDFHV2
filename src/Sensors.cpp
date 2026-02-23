@@ -1,4 +1,5 @@
 #include "Sensors.h"
+// #include <exception>
 
 Sensors::Sensors(void){
 }
@@ -13,12 +14,21 @@ void Sensors::init(void){
 void Sensors::fsm_init(void){
     //..... FSM305/BNO080 Init .....//
     Serial.print("FSM Init start..."); 
-    //delay(300);
+    delay(300);
     if (fsm.beginSPI(imuCSPin, imuWAKPin, imuINTPin, imuRSTPin, 4000000) == false){
         Serial.println("BNO080 over SPI not detected. Are you sure you have all 6 connections? Freezing...");
         while(1);
     }
-
+    // }
+    // try
+    // {
+    //     fsm.beginSPI(imuCSPin, imuWAKPin, imuINTPin, imuRSTPin, 4000000);
+    // }
+    // catch(const std::exception& e)
+    // {
+    //     Serial.println("BNO080 over SPI not detected. Are you sure you have all 6 connections? Freezing...");
+    // }
+    
     fsm.calibrateAll();
     fsm.enableLinearAccelerometer(DT_MSEC);  // m/s^2 no gravity
     fsm.enableRotationVector(DT_MSEC);  // quat
@@ -43,50 +53,54 @@ void Sensors::lidar_init(void){
     delay(200);
 }
 
-void Sensors::flow_init(void){
-// Initiate flow sensor
-    if(flow.begin()){
+void Sensors::flow_init(void)
+{
+    // Initiate flow sensor
+    if(flow.begin())
+    {
         flow.setLed(true);
         Serial.println("Flow connected successfully"); 
     }else{
         Serial.println("Flow failed to connected, check connections");
         while(1); 
     }
-
 }
 
-///.......... FSM305/BNO080 FUNCTIONS ..........////
-void Sensors::save_calibrate_fsm(void){
-    if(Serial.available()){
+//=== FSM305/BNO080 Methods ===//
+void Sensors::save_calibrate_fsm(void)
+{
+    if(Serial.available())
+    {
         byte incoming = Serial.read();
-
-        if(incoming == 's'){
+        if(incoming == 's')
+        {
             fsm.saveCalibration(); //Saves the current dynamic calibration data (DCD) to memory
             fsm.requestCalibrationStatus(); //Sends command to get the latest calibration status
 
             //Wait for calibration response, timeout if no response
             int counter = 100;
         
-            while(1){
+            while(1)
+            {
                 if(--counter == 0) break;
-                if(fsm.dataAvailable() == true){
-                //The IMU can report many different things. We must wait
-                //for the ME Calibration Response Status byte to go to zero
-                if(fsm.calibrationComplete() == true)
+                if(fsm.dataAvailable() == true)
                 {
-                    Serial.println("Calibration data successfully stored");
-                    delay(1000);
-                    break;
+                    //The IMU can report many different things. We must wait
+                    //for the ME Calibration Response Status byte to go to zero
+                    if(fsm.calibrationComplete() == true)
+                    {
+                        Serial.println("Calibration data successfully stored");
+                        delay(1000);
+                        break;
+                    }
                 }
+                delay(1);
             }
 
-            delay(1);
-        }
-
-        if(counter == 0) Serial.println("Calibration data failed to store. Please try again.");
-        //fsm.endCalibration(); //Turns off all calibration
-        //In general, calibration should be left on at all times. The BNO080
-        //auto-calibrates and auto-records cal data roughly every 5 minutes
+            if(counter == 0) Serial.println("Calibration data failed to store. Please try again.");
+            //fsm.endCalibration(); //Turns off all calibration
+            //In general, calibration should be left on at all times. The BNO080
+            //auto-calibrates and auto-records cal data roughly every 5 minutes
         }
     }  
 } 
@@ -148,7 +162,8 @@ void Sensors::sample_fsm(void){
     
 //... GARMIN LIDAR functions Begin ...//
 void Sensors::sample_lidar(void){
-    if (garmin.getBusyFlag() == 0){
+    if (garmin.getBusyFlag() == 0)
+    {
         // Trigger the next range measurement
         garmin.takeRange();
 
@@ -300,30 +315,31 @@ void Sensors::set_origin(){
    // X.Fill(0);
 }
 
-void Sensors::update_pos( float x, float y ){
+void Sensors::update_pos( float x, float y )
+{
     data.x = x;
     data.y = y;
     data.status.pos = 1;
 }
 
 // Rotate yaw to align with origin / home
-float Sensors::rotate_yaw( float yaw ){
+float Sensors::rotate_yaw( float yaw )
+{
 
     float rotated = yaw - yaw_origin;
 
-    if( rotated > PI )
-        rotated -= TWO_PI;
-    else if( rotated < -PI )
-        rotated += TWO_PI;
-    
+    if( rotated > PI ) rotated -= TWO_PI;
+    else if( rotated < -PI ) rotated += TWO_PI;
     return rotated;
 }
 
-void Sensors::clamp(float &value, float min, float max){
+void Sensors::clamp(float &value, float min, float max)
+{
     value = (value <= max && value >= min) ? 0.00f : value;
 }
 
-void Sensors::rotate_to_world( float * vector ){
+void Sensors::rotate_to_world( float * vector )
+{
 
     float p = data.roll;
     float q = data.pitch;

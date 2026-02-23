@@ -14,7 +14,7 @@
 #include <Arduino.h>
 #include "Servo.h"
 #include <math.h>
-#include "Constants.h"
+#include "Config.h"
 
 /*
 //define which board being used 
