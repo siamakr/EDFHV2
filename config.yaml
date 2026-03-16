@@ -1,0 +1,79 @@
+teensy_pin_assignments:
+  rw_pin: 37
+  edf_pin: 36
+  y_servo_pin: 33
+  x_servo_pin: 2
+
+physical_constraints:
+  max_vehicle_angle_degrees: 35.00
+  max_tvc_angle_degrees: 8.00
+  max_edf_thrust_newtons: 60.00
+
+vehicle_specs:
+  com_to_tvc_meters: 0.3302        # m
+  length_edf_meters: 0.050               # m
+  length_rw_meters: 0.12                 # m
+  mass_edf_kilograms: 0.700           # kg
+  mass_vehicle_kilograms: 4123.7              # kg
+  max_tvc_deflection_degrees: 8.00
+  max_yaw_torque_newtons: 3.61
+  min_thrust_newtons: 20.00         # Newtons
+  max_thrust_newtons: 59.77861      # Newtons
+  g_meters_per_second_squared: 9.807                  # m/s^2
+
+mass_moment_of_inertia:
+  v_jxx: 0.0058595
+  v_jyy: 0.0058595
+  v_jzz: 0.01202768
+  edf_jzz: 0.0001744        # EDF prop/motor
+  rw_jzz: 0.00174245        # Reaction wheel
+
+timing:
+  dt_microseconds: 5000
+  dt_milliseconds: 5.00
+  dt_seconds: 0.0050
+
+optical_flow:
+  pmw3901_fov_degrees: 42.0         # degrees
+  pmw3901_focal_pixels: 412.27     # pixels (pinhole model)
+  pmw3901_width_pixels: 30         # pixels
+
+imu_offsets:
+  fsm_pitch_offset_degrees: 0.0
+  fsm_roll_offset_degrees: 0.0
+  fsm_yaw_offset_degrees: 0.0
+
+edf_pwm:
+  edf_off_microseconds: 900          # usec
+  edf_min_microseconds: 1250         # usec
+  edf_max_microseconds: 2000         # usec
+  edf_max_sustained_microseconds: 1730
+  edf_idle_microseconds: 1560
+
+servo_pwm:
+  servo_x_center_microseconds: 1550
+  servo_y_center_microseconds: 1550
+  servo_x_min_microseconds: 1190
+  servo_y_min_microseconds: 1190
+  servo_x_max_microseconds: 1950
+  servo_y_max_microseconds: 1950
+
+tvc_regression_x:
+  x_p1: -0.4495171752
+  x_p2: 38.0541192575
+  x_p3: 1559.2072714421
+
+tvc_regression_y:
+  y_p1: -0.0263024983
+  y_p2: 25.6989554547
+  y_p3: 1527.8333080999
+
+edf_regression:
+  edf_p1: -0.0000073749
+  edf_p2: 0.2016275190
+  edf_p3: 1017.2286135313
+
+rw_regression:
+  rw_p1: 0.0008412945
+  rw_p2: 2.5341532938
+  rw_p3: 1050.1703888209

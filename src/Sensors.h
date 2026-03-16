@@ -5,9 +5,9 @@
 
 #include <Wire.h>
 #include <SPI.h>
-#include "BNO080.h"
-#include "LIDARLite_v3HP.h"
-#include "PMW3901.h"
+#include <BNO080.h>
+#include <LIDARLite_v3HP.h>
+#include <PMW3901.h>
 #include <Math.h>
 #include <BasicLinearAlgebra.h>
 #include <stdint.h>

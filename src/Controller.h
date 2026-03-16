@@ -4,8 +4,8 @@
 #define _EDFH_CONTROLLER_H
 
 #include "Actuator.h"
-#include "Servo.h"
-#include "Sensors.h"
+#include <Servo.h>
+#include <Sensors.h>
 #include <Math.h>
 #include <BasicLinearAlgebra.h>
 #include <stdint.h>
