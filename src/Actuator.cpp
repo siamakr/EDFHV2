@@ -15,11 +15,11 @@ void Actuator::init(void){
     
 void Actuator::init_servos(void){
     //attach servo pins
-    //sx.attach(XSERVO_PIN, SERVO_X_MIN_US, SERVO_X_MAX_US);
-    sx.attach(XSERVO_PIN);
+    //sx.attach(X_SERVO_PIN, SERVO_X_MIN_MICROSECONDS, SERVO_X_MAX_MICROSECONDS);
+    sx.attach(X_SERVO_PIN);
     delay(10);
-    //sy.attach(YSERVO_PIN, SERVO_Y_MIN_US, SERVO_Y_MAX_US);
-    sy.attach(YSERVO_PIN);
+    //sy.attach(Y_SERVO_PIN, SERVO_Y_MIN_MICROSECONDS, SERVO_Y_MAX_MICROSECONDS);
+    sy.attach(Y_SERVO_PIN);
     delay(10);
     // rw.attach(RW_PIN);
     // delay(200);
@@ -33,7 +33,7 @@ void Actuator::init_rw(void){
 void Actuator::init_edf(void){
     edf.attach(EDF_PIN);
     delay(20);    
-    edf.writeMicroseconds(EDF_OFF_PWM);
+    edf.writeMicroseconds(EDF_OFF_MICROSECONDS);
     delay(100);  
 }
 
@@ -51,18 +51,18 @@ void Actuator::zero_rw(){
 
 void Actuator::prime_edf(void){
     //go to 1500 and wait 5 seconds
-    edf.writeMicroseconds(EDF_MIN_PWM);
+    edf.writeMicroseconds(EDF_MIN_MICROSECONDS);
     delay(5000);
 }
 
 void Actuator::prime_edf(int delay_time_ms){
     //go to 1500 and wait 5 seconds
-    edf.writeMicroseconds(EDF_MIN_PWM);
+    edf.writeMicroseconds(EDF_MIN_MICROSECONDS);
     delay(delay_time_ms);
 }
 
 bool Actuator::prime_edf(int delay_time_ms, float start_timer){
-    edf.writeMicroseconds(EDF_MIN_PWM);
+    edf.writeMicroseconds(EDF_MIN_MICROSECONDS);
     if((millis() - start_timer) < delay_time_ms){
         return true;
     }else{
@@ -86,13 +86,13 @@ bool Actuator::servo_dance(float max_angle, int delay_time_ms){
     // delay(500);
     
     for(int i{0}; i <= 360; i++){
-        writeXservo((float) max_angle * (float) sin( i * d2r) );
-        writeYservo((float) max_angle * (float) cos( i * d2r ) );
+        writeXservo((float) max_angle * (float) sin( i * D2R) );
+        writeYservo((float) max_angle * (float) cos( i * D2R ) );
         
         //for debugging/testing
-        Serial.print(max_angle * sin( (float) i * d2r ));
+        Serial.print(max_angle * sin( (float) i * D2R ));
         Serial.print("\t");
-        Serial.println(max_angle * cos( (float) i * d2r ));
+        Serial.println(max_angle * cos( (float) i * D2R ));
 
         delay(delay_time_ms);
     }
@@ -145,7 +145,7 @@ void Actuator::writeEDF(int pwm){
 
 void Actuator::writeRW(float grams){
     //int pwm{round(RW_P1 * omega + RW_P2)};
-    int pwm{ round( (RW_P1_GRAMS * pow(grams,2)) + RW_P2_GRAMS * grams + RW_P3_GRAMS )};
+    int pwm{ round( (RW_P1 * pow(grams,2)) + RW_P2 * grams + RW_P3 )};
     LIMIT(pwm, 900, 2000);
     ad.pwmrw = pwm;
     ad.antirotor_thrust_g = grams;
@@ -153,7 +153,7 @@ void Actuator::writeRW(float grams){
 }
 
 void Actuator::edf_shutdown(void){
-    edf.writeMicroseconds(EDF_OFF_PWM);
+    edf.writeMicroseconds(EDF_OFF_MICROSECONDS);
 }
 
 

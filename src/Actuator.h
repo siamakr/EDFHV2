@@ -17,11 +17,8 @@
 #include "Config.h"
 
 
-#define d2r (PI/180.00f)
-#define r2d (180.00f/PI)
-
 template<typename T>
-T clamp( T Value, T Min, T Max){
+T clamp( T &Value, T Min, T Max){
   return (Value < Min)? Min : (Value > Max)? Max : Value;
 }
 

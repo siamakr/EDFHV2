@@ -11,32 +11,6 @@
 #include <stdint.h>
 #include "Config.h"
 
-// #define d2r (PI/180.00f)
-// #define r2d (180.00f/PI)
-
-// //// Vehicle Specs + General Constants
-// #define COM_TO_TVC 0.1335                                       //m
-// #define ledf .050                                               //m
-// #define lrw 0.12                                               //m
-// #define MASS_EDF .700                                           //Kg
-// //#define MASS 3.273                                              //Kg
-// #define MASS 3.373                                              //Kg
-// //#define MASS 2.9                                              //Kg
-// #define MAX_TVC_DEFLECTION_DEG 4.00f                           //deg
-// #define MAX_TVC_DEFLECTION_RAD (d2r * MAX_TVC_DEFLECTION_DEG)   //rad
-// #define MAX_YAW_TORQUE 1.61
-// #define MIN_THRUST 17.00                                        //Newtons
-// #define MAX_THRUST 45.00                                        //Newtons
-// #define G 9.807                                                  //m/s^2
-
-
-// //MASS-MOMENT-OF-INERTIA OF VEHICLE
-// #define V_JXX 0.0058595f
-// #define V_JYY 0.0058595f
-// #define V_JZZ 0.01202768f
-// #define EDF_JZZ 0.0001744f      //MASS-MOMENT-OF-INERTIA OF EDF-PROP/MOTOR
-// #define RW_JZZ 0.00174245f      //MASS-MOMENT-OF-INERTIA OF REACTION WHEEL
-
 using namespace BLA;
 
 typedef struct {
@@ -127,9 +101,9 @@ public:
     float _gain_pitch_int{0.5};             //PITCH INTEGRAL GAIN       
     float _gain_yaw_int{-.0001};               //YAW INTEGRAL GAIN
 
-    float _int_bound_att{d2r * 2.00f};
+    float _int_bound_att{D2R * 2.00f};
     float _int_bound_alt{0.050f};
-    float _max_int_def{d2r*2.00f};
+    float _max_int_def{D2R*2.00f};
 
     float _alpha_servo{0.050};               //SERVO ACTUATOR SIGNAL FILTER ALPHA 
 

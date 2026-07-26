@@ -15,37 +15,14 @@
 
 using namespace BLA;
 
-/*
-#define PMW3901_FOV 42.0f           // Degress
-#define PMW3901_FOCAL 412.27f       // Focal length in pixels (found experimentally using pin-hole model)
-#define PMW3901_WIDTH 30            // Pixels
-
-//..... Defines .....//
-#define DT_USEC 5000
-#define DT_MSEC 5.00f
-#define DT_SEC (0.0050)
-#define d2r (PI/180.00f)
-#define r2d (180.00f/PI)
-
-#define FSM_PITCH_OFFSET_RAD (d2r * 1.3772)
-#define FSM_ROLL_OFFSET_RAD (d2r * 0.6578f)
-#define FSM_YAW_OFFSET_RAD (d2r * 0.00f)
-// #define FSM_ROLL_OFFSET_RAD (d2r * -1.28331)
-// #define FSM_PITCH_OFFSET_RAD (d2r * -2.18253)
-
-*/
-
 //..... SPI Pin Definitons .....//
-const byte imuCSPin = 10;
-const byte imuWAKPin = 7;
-const byte imuINTPin = 8;
-const byte imuRSTPin = 9;
+const byte imuCSPin = IMU_CS_PIN;
+const byte imuWAKPin = IMU_WAKE_PIN;
+const byte imuINTPin = IMU_INT_PIN;
+const byte imuRSTPin = IMU_RST_PIN;
 
-const float roll_offset{d2r*1.3772};
-const float pitch_offset{d2r*0.6578f};
-
-//..... Lidar Definitions .....//
-//uint8_t garminAddress{0x62};
+const float roll_offset{D2R * 1.3772};
+const float pitch_offset{D2R * 0.6578f};
 
 //.......... Structure Definitions ..........//
 typedef struct{
@@ -103,19 +80,19 @@ public:
     volatile float yaw_raw{0.00f};
 
     // Estimator matrixes
-    Matrix<6,6> A = {   1,  0,  0,  DT_SEC, 0,  0,          //x
-                        0,  1,  0,  0,  DT_SEC, 0,          //y
-                        0,  0,  1,  0,  0,  DT_SEC,         //z
+    Matrix<6,6> A = {   1,  0,  0,  DT_SECONDS, 0,  0,          //x
+                        0,  1,  0,  0,  DT_SECONDS, 0,          //y
+                        0,  0,  1,  0,  0,  DT_SECONDS,         //z
                         0,  0,  0,  1,  0,  0,              //vx
                         0,  0,  0,  0,  1,  0,              //vy
                         0,  0,  0,  0,  0,  1 };            //vz
 
-    Matrix<6,3> B = {   0.5*pow(DT_SEC,2),  0,              0,         
-                        0,              0.5*pow(DT_SEC,2),  0,         
-                        0,              0,              0.5*pow(DT_SEC,2),  
-                        DT_SEC,             0,              0,         
-                        0,              DT_SEC,             0,         
-                        0,              0,              DT_SEC };
+    Matrix<6,3> B = {   0.5*pow(DT_SECONDS,2),  0,              0,         
+                        0,              0.5*pow(DT_SECONDS,2),  0,         
+                        0,              0,              0.5*pow(DT_SECONDS,2),  
+                        DT_SECONDS,             0,              0,         
+                        0,              DT_SECONDS,             0,         
+                        0,              0,              DT_SECONDS };
                     //  ax              ay                  az
  
     Matrix<6,6> H = {   0.00f, 0.00f, 0.00f, 0.00f, 0.00f, 0.00f,   //x

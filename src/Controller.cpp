@@ -35,7 +35,7 @@ void Controller::lqr(float r, float p, float y, float gx, float gy, float gz, fl
     error = Xs - REF;
 
     //altitude integral action 
-    error(8)  = ( ( error(6) >= (-1 * _int_bound_alt) ) && ( error(6) <= _int_bound_alt ) ) ? (cd.e_int(8) +  (error(6) * DT_SEC ) ) : 0.00f;       
+    error(8)  = ( ( error(6) >= (-1 * _int_bound_alt) ) && ( error(6) <= _int_bound_alt ) ) ? (cd.e_int(8) +  (error(6) * DT_SECONDS ) ) : 0.00f;       
 
     LIMIT(error(8) , -1 * _int_bound_alt, _int_bound_alt);
 
@@ -43,7 +43,7 @@ void Controller::lqr(float r, float p, float y, float gx, float gy, float gz, fl
     U = -K_int * error;
 
     //Update the EDF motor control signal with Vehicle weight
-    U(3) += MASS * G;         //Normal Mode
+    U(3) += MASS_VEHICLE_KILOGRAMS * G_METERS_PER_SECOND_SQUARED;         //Normal Mode
 
     //Calculate each component of the Thrust Vector
     float Tx{ U(3) * U(0)};
@@ -51,8 +51,8 @@ void Controller::lqr(float r, float p, float y, float gx, float gy, float gz, fl
     float Tz{ U(3) }; 
 
     //Calculate desired torque for roll/pitch using alternate method
-    cd.trq_x = Tx * COM_TO_TVC;
-    cd.trq_y = Ty * COM_TO_TVC;
+    cd.trq_x = Tx * COM_TO_TVC_METERS;
+    cd.trq_y = Ty * COM_TO_TVC_METERS;
 
     //Get the magnitude of the thrust vector
     float Tm{sqrt(pow(Tx,2) + pow(Ty,2) + pow(Tz,2))};
@@ -67,8 +67,8 @@ void Controller::lqr(float r, float p, float y, float gx, float gy, float gz, fl
     //  U(3) = Tm;
 
     //convert desired Yaw torque into thrust force per yaw motor
-    const float desired_yaw_force = ((U(2) / lrw) / 2) ;                    //dividing by 2 to split force between 2 yaw props
-    const float desired_yaw_grams{(desired_yaw_force/G) * 1000};
+    const float desired_yaw_force = ((U(2) / LENGTH_RW_METERS) / 2) ;                    //dividing by 2 to split force between 2 yaw props
+    const float desired_yaw_grams{(desired_yaw_force/G_METERS_PER_SECOND_SQUARED) * 1000};
 
     //Feedforward
     // U(0) += U_pos(0) * _gain_ff_roll;
@@ -81,14 +81,14 @@ void Controller::lqr(float r, float p, float y, float gx, float gy, float gz, fl
     //Limit/Clamp
     LIMIT(U(0), -1 * MAX_TVC_DEFLECTION_RAD, MAX_TVC_DEFLECTION_RAD );
     LIMIT(U(1), -1 * MAX_TVC_DEFLECTION_RAD, MAX_TVC_DEFLECTION_RAD );
-    LIMIT(U(2), 0, MAX_YAW_TORQUE);            //FROM 10 RAD/S TO 80 RAD/S THIS IS CURRENTLY TORQUE THOUGH
-    LIMIT(U(3), MIN_THRUST, MAX_THRUST);
+    LIMIT(U(2), 0, MAX_YAW_TORQUE_NEWTONS);            //FROM 10 RAD/S TO 80 RAD/S THIS IS CURRENTLY TORQUE THOUGH
+    LIMIT(U(3), MIN_THRUST_NEWTONS, MAX_THRUST_NEWTONS);
 
 
     //Actuate
     act.writeEDF((float) U(3));
-    act.writeXservo((float) r2d * U(0));
-    act.writeYservo((float) r2d * U(1));
+    act.writeXservo((float) R2D * U(0));
+    act.writeYservo((float) R2D * U(1));
     act.writeRW(desired_yaw_grams);
 
     //Store data for next iteration 
@@ -110,8 +110,8 @@ void Controller::lqr_pos( float x, float y, float vx, float vy, float yaw ){
 
     error = SP_pos - X_pos;                         // Calculate state error
 
-    error_integral_x += error(0) * DT_USEC*1;       // Integral computation and limit
-    error_integral_y += error(1) * DT_USEC*1;
+    error_integral_x += error(0) * DT_MICROSECONDS*1;       // Integral computation and limit
+    error_integral_y += error(1) * DT_MICROSECONDS*1;
 
     LIMIT( error_integral_x, -0.35, 0.35 );         // Clamp integral values
     LIMIT( error_integral_y, -0.35, 0.35 );
@@ -121,8 +121,8 @@ void Controller::lqr_pos( float x, float y, float vx, float vy, float yaw ){
 
     output = K_pos * error;                         // Run controller
 
-    LIMIT( output(0), -10 * d2r, 10 * d2r );        // Clamp output
-    LIMIT( output(1), -10 * d2r, 10 * d2r );
+    LIMIT( output(0), -10 * D2R, 10 * D2R );        // Clamp output
+    LIMIT( output(1), -10 * D2R, 10 * D2R );
 
     //U_pos = output;                               // Update 
     //This is now done inside Main.cpp
@@ -160,11 +160,11 @@ void Controller::set_reference( control_setpoint_t cs, float value ){
 
 void Controller::gain_schedule(float error_roll, float error_gx, float error_pitch, float error_gy, float error_altitude){
     //-- roll 
-    const float slope_roll{(0.250 - 0.13)/(d2r*2.00f)};
+    const float slope_roll{(0.250 - 0.13)/(D2R*2.00f)};
     _gain_roll = -slope_roll * abs(error_roll) + 0.13;
     LIMIT(_gain_roll, 0.15f, 0.25f);
     //-- pitch 
-    const float slope_pitch{(0.250 - 0.13)/(d2r*2.00f)};
+    const float slope_pitch{(0.250 - 0.13)/(D2R*2.00f)};
     _gain_pitch = -slope_pitch * abs(error_pitch) + 0.13;
     LIMIT(_gain_pitch, 0.15f, 0.25f);
 

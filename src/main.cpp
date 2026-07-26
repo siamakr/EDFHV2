@@ -61,7 +61,7 @@ void setup() {
 
   //--- Initialize initial coniditions of flight and set state machine start ---//
   control.set_reference(SETPOINT_Z, 0.500f);
-  control.set_reference(SETPOINT_YAW, d2r*60.00);
+  control.set_reference(SETPOINT_YAW, D2R*60.00);
   //--- Initialize initial coniditions of flight and set state machine start ---//
 
   control.status = CONTROL_STATUS_IMU_CALIBRATION;
@@ -87,7 +87,7 @@ void loop() {
 
         //Set init set-points
           control.set_reference(SETPOINT_Z, 0.400f);
-          control.set_reference(SETPOINT_YAW, d2r*60); 
+          control.set_reference(SETPOINT_YAW, D2R*60); 
 
         //Change state   
           control.status = CONTROL_STATUS_EDF_PRIMING;  //changes state to edf priming on next state
@@ -139,7 +139,7 @@ void loop() {
     break;
 
     case CONTROL_STATUS_IMU_CALIBRATION:
-      if(micros() - print_timer >= (DT_USEC * 20)  ){       //must use this type of timer for delays 
+      if(micros() - print_timer >= (DT_MICROSECONDS * 20)  ){       //must use this type of timer for delays 
         print_timer = micros();
         sensor.print_fsm();
       }
@@ -168,7 +168,7 @@ void loop() {
 void run_hover_program(void){
   //Sample IMU as fast as possible
   //..... Sensor Timer .....//
-  if(micros() - sensor_timer >= DT_USEC){       //DT_USEC = 5µs
+  if(micros() - sensor_timer >= DT_MICROSECONDS){       //DT_MICROSECONDS = 5µs
     sensor_timer = micros();    //update timer
     sensor.sample_lidar();      //read lidar 
     sensor.run_estimator();     //execute estimator
@@ -196,13 +196,13 @@ void run_hover_program(void){
 
   }
   //..... Optical Flow Timer .....//   
-  if(micros() - flow_timer >= DT_USEC*2){      //run at half speed
+  if(micros() - flow_timer >= DT_MICROSECONDS*2){      //run at half speed
     flow_timer = micros();
     sensor.sample_flow();       //read flow
   }
 
   //..... Print Timer .....//
-  if(micros() - print_timer >= (DT_USEC*4)  ){  //print at 1/4 speed to not bog up Serial
+  if(micros() - print_timer >= (DT_MICROSECONDS*4)  ){  //print at 1/4 speed to not bog up Serial
     print_timer = micros();
     //control.print_debug();
     print_control_imu();
@@ -332,20 +332,20 @@ void print_control_imu(void){
     elapsed_time/1000000,
     sensor.estimate.x,
     sensor.estimate.vx,
-    r2d*control.cd.u(0),
-    r2d*sensor.data.roll,
-    r2d*control.cd.ref0, 
+    R2D*control.cd.u(0),
+    R2D*sensor.data.roll,
+    R2D*control.cd.ref0, 
     sensor.data.gx,
     
     sensor.estimate.y,
     sensor.estimate.vy,
-    r2d*control.cd.u(1),
-    r2d*sensor.data.pitch, 
-    r2d*control.cd.ref1,
+    R2D*control.cd.u(1),
+    R2D*sensor.data.pitch, 
+    R2D*control.cd.ref1,
     sensor.data.gy,
     
-    r2d*sensor.data.yaw,
-    r2d*control.SP_hover_int(2),
+    R2D*sensor.data.yaw,
+    R2D*control.SP_hover_int(2),
     control.cd.u(2),
 
     sensor.estimate.z,
@@ -397,25 +397,25 @@ void print_controller(void){
   char text[250];
   //              roll  rollsp    pitch  pitchsp    yaw        deltax deltay deltax deltay  u0    u1      u2      u3        estvz estz    dataz   dataez  ax      ay    az        Tedf    pwmedf   
   sprintf(text, "%0.5f, %0.5f,%i,       %0.5f,  %0.5f,  %0.5f,       %0.5f,  %0.5f,  %0.5f,  %0.5f,         %0.5f, %0.5f,     %0.5f, %0.5f,  %0.5f,  %0.5f,    %0.5f, %i,       %i, %i, %i ",
-  // r2d*sensor.data.roll,                 // 1
-  // r2d*control.SP_hover_int(0),          // 2
-  // r2d*sensor.data.pitch,                // 3
-  // r2d*control.SP_hover_int(1),          // 4
-  // r2d*sensor.data.yaw,                // 3
-  // r2d*control.SP_hover_int(2),          // 4
+  // R2D*sensor.data.roll,                 // 1
+  // R2D*control.SP_hover_int(0),          // 2
+  // R2D*sensor.data.pitch,                // 3
+  // R2D*control.SP_hover_int(1),          // 4
+  // R2D*sensor.data.yaw,                // 3
+  // R2D*control.SP_hover_int(2),          // 4
 
-  r2d*sensor.data.yaw,                // 3
+  R2D*sensor.data.yaw,                // 3
   control.cd.u(2),
   control.act.ad.pwmrw,
 
 
-  r2d*control.cd.delta_xx,              //6
-  r2d*control.cd.delta_x,               //7
-  r2d*control.cd.delta_yy,              //8
-  r2d*control.cd.delta_y,               //9
+  R2D*control.cd.delta_xx,              //6
+  R2D*control.cd.delta_x,               //7
+  R2D*control.cd.delta_yy,              //8
+  R2D*control.cd.delta_y,               //9
 
-  r2d*control.cd.u(0),                  //10
-  r2d*control.cd.u(1),                  //11
+  R2D*control.cd.u(0),                  //10
+  R2D*control.cd.u(1),                  //11
   (control.cd.u(2)/RW_JZZ),                      //12
   control.cd.u(3),
 
@@ -445,9 +445,9 @@ void print_estimator_main(void){
   char text[250];
 
   sprintf(text, "%0.5f, %0.5f, %0.5f, %0.5f, \t   %0.5f, %0.5f, %0.5f,\t  %0.5f, %0.5f, %0.5f, \t  %0.5f, %0.5f, %0.5f, \t  %i, %i, %i ",
-  r2d*sensor.data.roll,
-  r2d*sensor.data.pitch,
-  r2d*sensor.data.yaw,
+  R2D*sensor.data.roll,
+  R2D*sensor.data.pitch,
+  R2D*sensor.data.yaw,
   sensor.data.z,
 
   sensor.estimate.x,
@@ -486,9 +486,9 @@ void flow_debugger(void){
   // sensor.debug.y_int,
   // sensor.debug.xpre_vy,
 
-  r2d*sensor.data.roll,
-  r2d*sensor.data.pitch,
-  r2d*sensor.data.yaw,
+  R2D*sensor.data.roll,
+  R2D*sensor.data.pitch,
+  R2D*sensor.data.yaw,
   
   sensor.estimate.vx,
   sensor.estimate.vy,

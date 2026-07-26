@@ -30,12 +30,12 @@ void Sensors::fsm_init(void){
     // }
     
     fsm.calibrateAll();
-    fsm.enableLinearAccelerometer(DT_MSEC);  // m/s^2 no gravity
-    fsm.enableRotationVector(DT_MSEC);  // quat
-    //fsm.enableGameRotationVector(DT_MSEC);
-    fsm.enableGyro(DT_MSEC);  // rad/s
-    //fsm.enableGyroIntegratedRotationVector(DT_MSEC);
-    //fsm.enableMagnetometer(DT_MSEC);  // cannot be enabled at the same time as RotationVector (will not produce data)
+    fsm.enableLinearAccelerometer(DT_MILLISECONDS);  // m/s^2 no gravity
+    fsm.enableRotationVector(DT_MILLISECONDS);  // quat
+    //fsm.enableGameRotationVector(DT_MILLISECONDS);
+    fsm.enableGyro(DT_MILLISECONDS);  // rad/s
+    //fsm.enableGyroIntegratedRotationVector(DT_MILLISECONDS);
+    //fsm.enableMagnetometer(DT_MILLISECONDS);  // cannot be enabled at the same time as RotationVector (will not produce data)
     
     Serial.println("FSM Init Finished..."); 
     delay(300);
@@ -151,8 +151,8 @@ void Sensors::sample_fsm(void){
 
 
         //... Euler Angle Representation ...//
-        data.pitch = fsm.getRoll() + d2r* 0.6578f;
-        data.roll = fsm.getPitch() + d2r* 1.3772;
+        data.pitch = fsm.getRoll() + D2R* 0.6578f;
+        data.roll = fsm.getPitch() + D2R* 1.3772;
         data.yaw = fsm.getYaw();    
         //data.yaw = rotate_yaw(yaw_raw);
         //data.yaw = fsm.getYaw();
@@ -193,8 +193,8 @@ void Sensors::sample_flow(){
     debug.vy_raw = dy;
 
     // Convert change in pixels to unitless velocity 1/s
-    ofx = ((float) dx / dt ) / PMW3901_FOCAL; // Focal length (in px) found experimentally
-    ofy = ((float)dy / dt ) / PMW3901_FOCAL;
+    ofx = ((float) dx / dt ) / PMW3901_FOCAL_PIXELS; // Focal length (in px) found experimentally
+    ofy = ((float)dy / dt ) / PMW3901_FOCAL_PIXELS;
 
     // Return the unitless velocity, which can be scaled by height above ground (z)
     data.vx = ofx; // pixels / second
@@ -225,7 +225,7 @@ void Sensors::run_estimator(void){
     // Rotate lidar measurement to world frame
     p[2] = data.z;
     rotate_to_world( p );
-    float vz_lidar = (p[2] - data.ez) / DT_SEC;
+    float vz_lidar = (p[2] - data.ez) / DT_SECONDS;
     data.ez = p[2];
     data.evz = vz_lidar;
 
@@ -236,15 +236,15 @@ void Sensors::run_estimator(void){
     v[1] = data.vy * p[2] - data.gx * p[2]; 
     rotate_to_world( v );
 
-    // debug.x_comp += v[0] * DT_SEC;
-    // debug.y_comp += v[1] * DT_SEC;
+    // debug.x_comp += v[0] * DT_SECONDS;
+    // debug.y_comp += v[1] * DT_SECONDS;
 
     // Rotate acceleration to world frame
     a[0] = data.ax; a[1] = data.ay; a[2] = data.az;
     rotate_to_world( a );
 
     //integrate az to get vz from accelerometer for testing 
-    // data.evz_accel += a[2] * DT_SEC;
+    // data.evz_accel += a[2] * DT_SECONDS;
     // data.evz_accel = IIR(data.evz_accel, data.evz_accel_prev, 0.05);
     // data.evz_accel_prev = data.evz_accel;
 
@@ -366,13 +366,13 @@ float Sensors::IIR(float newSample, float prevOutput, float alpha){
 void Sensors::print_imu(void){
     char text[250];
     sprintf(text, "%0.5f, %0.5f, %0.5f, \t   %0.5f, %0.5f, %0.5f,\t   %0.5f, %0.5f, %0.5f,\t   %0.5f, %0.5f, %0.5f, \t  %0.5f, %0.5f, %0.5f, \t  %i, %i, %i ",
-    r2d*data.roll,
-    r2d*data.pitch,
-    r2d*data.yaw,
+    R2D*data.roll,
+    R2D*data.pitch,
+    R2D*data.yaw,
 
-    r2d*data.gx,
-    r2d*data.gy,
-    r2d*data.gz,
+    R2D*data.gx,
+    R2D*data.gy,
+    R2D*data.gz,
 
     data.ax,
     data.ay,
@@ -397,16 +397,16 @@ void Sensors::print_imu(void){
 void Sensors::print_fsm(void){
     char text[250];
     sprintf(text, "%0.5f, %0.5f, %0.5f,\t   %0.5f, %0.5f, %0.5f, %0.5f,\t  %0.5f, %0.5f, %0.5f, \t  %0.5f, %0.5f, %0.5f    ",
-    r2d*data.roll,
-    r2d*data.pitch,
-    r2d*data.yaw,
+    R2D*data.roll,
+    R2D*data.pitch,
+    R2D*data.yaw,
     data.qi,
     data.qj,
     data.qk,
     data.qw,
-    r2d*data.gx,
-    r2d*data.gy,
-    r2d*data.gz,
+    R2D*data.gx,
+    R2D*data.gy,
+    R2D*data.gz,
     data.ax,
     data.ay,
     data.az);
@@ -424,9 +424,9 @@ void Sensors::print_estimator(void){
     char text[250];
 
     sprintf(text, "%0.5f, %0.5f, %0.5f, %0.5f, \t   %0.5f, %0.5f, %0.5f,\t  %0.5f, %0.5f, %0.5f, \t  %0.5f, %0.5f, %0.5f, \t  %i, %i, %i ",
-    r2d*data.roll,
-    r2d*data.pitch,
-    r2d*data.yaw,
+    R2D*data.roll,
+    R2D*data.pitch,
+    R2D*data.yaw,
     data.z,
 
     estimate.x,
