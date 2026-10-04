@@ -30,11 +30,12 @@
 
 class PMW3901 {
 public:
-  PMW3901();
+  explicit PMW3901(uint8_t csPin);
 
   boolean begin(void);
 
   void readMotionCount(int16_t *deltaX, int16_t *deltaY);
+  void readMotionCount(int16_t *deltaX, int16_t *deltaY, uint8_t *squal);
   void enableFrameBuffer();
   void readFrameBuffer(char *FBuffer);
 

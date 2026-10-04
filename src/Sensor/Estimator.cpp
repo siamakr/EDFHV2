@@ -46,9 +46,13 @@ void Estimator::reset()
     _Z.Fill(0.0f);
     _Uaccel.Fill(0.0f);
     _state         = StateEstimate{};
-    _prevZWorld_m  = 0.0f;
-    _extPosFresh   = false;
-    _seeded        = false;
+    _prevZWorld_m        = 0.0f;
+    _gyroIntX_rad        = 0.0f;
+    _gyroIntY_rad        = 0.0f;
+    _gyroIntXAtFlow_rad  = 0.0f;
+    _gyroIntYAtFlow_rad  = 0.0f;
+    _extPosFresh         = false;
+    _seeded              = false;
 }
 
 void Estimator::setExternalPosition(float x_m, float y_m)
@@ -118,17 +122,38 @@ void Estimator::update(const SensorFrame& f)
     _dbg.vzLidar_mps = (zWorld - _prevZWorld_m) / DT;
     _prevZWorld_m    = zWorld;
 
-    // ── Optical flow: gyro-compensate, scale by height, rotate ────────────
-    // The sensor cannot tell translation from rotation: pitching over a static
-    // floor produces flow identical to sliding across it. Subtracting the
-    // body rate removes the rotational part. Both terms scale with height,
-    // since angular flow times distance is a velocity.
+    // ── Optical flow: gyro-compensate, scale by range, rotate ─────────────
+    // Pixhawk / PX4:
+    //   - convert counts to radians with FOCAL (385)
+    //   - subtract the gyro *integral* over the same interval
+    //   - scale by beam range (not tilt-compensated world Z)
+    //   - v = (flow_rate - gyro_rate) * range
     //
-    // Note the axis pairing -- vx is compensated with gy and vy with gx. A
-    // rotation about Y moves the image along X.
+    // Range is the lidar's raw beam length: the PMW3901 looks along the same
+    // body -Z as the lidar. Using zWorld (feet AGL, tilt-projected, often
+    // negative on the pad) inverted and under-scaled the velocity.
+    _gyroIntX_rad += f.imu.gx_rps * DT;
+    _gyroIntY_rad += f.imu.gy_rps * DT;
+
+    float range = f.lidar.raw_cm * 0.01f;
+    if (range < cfg::flow::MIN_RANGE_M) range = cfg::flow::MIN_RANGE_M;
+    if (range > cfg::flow::MAX_RANGE_M) range = cfg::flow::MAX_RANGE_M;
+    _dbg.flowRange_m = range;
+
+    float gxAvg = f.imu.gx_rps;
+    float gyAvg = f.imu.gy_rps;
+    if (f.flowFresh && f.flow.dt_s > 0.0f) {
+        gxAvg = (_gyroIntX_rad - _gyroIntXAtFlow_rad) / f.flow.dt_s;
+        gyAvg = (_gyroIntY_rad - _gyroIntYAtFlow_rad) / f.flow.dt_s;
+        _gyroIntXAtFlow_rad = _gyroIntX_rad;
+        _gyroIntYAtFlow_rad = _gyroIntY_rad;
+    }
+
+    // Axis pairing matches a downward pinhole aligned to the body: pitch
+    // (gy) produces X flow, roll (gx) produces Y flow. Same as V0.1.
     const BLA::Matrix<3, 1> vBody{
-        (f.flow.vx * zWorld) - (f.imu.gy_rps * zWorld),
-        (f.flow.vy * zWorld) - (f.imu.gx_rps * zWorld),
+        (f.flow.vx - gyAvg) * range,
+        (f.flow.vy - gxAvg) * range,
         0.0f
     };
     const BLA::Matrix<3, 1> vWorld = R * vBody;

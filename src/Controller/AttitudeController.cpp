@@ -1,5 +1,6 @@
 #include "AttitudeController.h"
 #include <algorithm>
+#include <math.h>
 
 using namespace cfg::ctrl;
 using cfg::vehicle::WEIGHT_N;
@@ -66,6 +67,10 @@ BLA::Matrix<4, 1> AttitudeController::update(
     // in the same unit as the output, so nothing downstream has to convert.
     u(0) *= R2D;
     u(1) *= R2D;
+    if (!isfinite(u(0))) u(0) = 0.0f;
+    if (!isfinite(u(1))) u(1) = 0.0f;
+    if (!isfinite(_prevGimbalX_deg)) _prevGimbalX_deg = 0.0f;
+    if (!isfinite(_prevGimbalY_deg)) _prevGimbalY_deg = 0.0f;
 
     // Hover-thrust feedforward: regulate deviation from hover, not full weight.
     u(3) += WEIGHT_N;

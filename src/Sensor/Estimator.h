@@ -59,9 +59,10 @@ struct EstimatorDebug {
     float zWorld_m    = 0.0f;
     float vzLidar_mps = 0.0f;
 
-    // Flow after gyro compensation, height scaling and rotation: the actual
+    // Flow after gyro compensation, range scaling and rotation: the actual
     // vx/vy fed to the correction step
     float vxMeas_mps = 0.0f, vyMeas_mps = 0.0f;
+    float flowRange_m = 0.0f;
 
     // Prediction before the correction step
     float xpreX_m = 0.0f, xpreY_m = 0.0f, xpreZ_m = 0.0f;
@@ -143,6 +144,13 @@ private:
 
     // Previous tilt-compensated height, for the diagnostic vz derivative
     float _prevZWorld_m = 0.0f;
+
+    // Gyro integrated at the estimator rate, snapshotted when flow is fused
+    // so compensation uses the average rate over the flow interval (PX4).
+    float _gyroIntX_rad = 0.0f;
+    float _gyroIntY_rad = 0.0f;
+    float _gyroIntXAtFlow_rad = 0.0f;
+    float _gyroIntYAtFlow_rad = 0.0f;
 
     // Cleared by reset(). The first valid altitude afterwards is written
     // straight into the state instead of being treated as a measurement to

@@ -54,7 +54,22 @@ void Actuator::writeRaw(uint16_t us)
 {
     _cutOff = false;
     _lastUs = us;
+    _currentValue = fromPwm(us);
     _servo.writeMicroseconds(us);
+}
+
+float Actuator::fromPwm(uint16_t us) const
+{
+    const float c = _p0 - (float)us;
+    if (fabsf(_p2) < 1e-8f) {
+        return (fabsf(_p1) < 1e-8f) ? _neutral : (-c / _p1);
+    }
+    const float disc = _p1 * _p1 - 4.0f * _p2 * c;
+    if (disc < 0.0f) return _neutral;
+    const float root = sqrtf(disc);
+    const float r1 = (-_p1 + root) / (2.0f * _p2);
+    const float r2 = (-_p1 - root) / (2.0f * _p2);
+    return (fabsf(r1 - _neutral) <= fabsf(r2 - _neutral)) ? r1 : r2;
 }
 
 void Actuator::setPwmLimits(uint16_t minUs, uint16_t maxUs)

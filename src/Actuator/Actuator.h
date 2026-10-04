@@ -64,6 +64,10 @@ public:
     // Pulse last written to the pin, from any path.
     uint16_t getLastPwmUs() const { return _lastUs; }
 
+    // Inverse of toPwm(): pulse (us) -> natural units. Used by the servo
+    // bench mode so a raw 5 us nudge still has an angle next to it.
+    float fromPwm(uint16_t us) const;
+
     float getCurrentValue() const { return _currentValue; }
     float getMin()          const { return _min; }
     float getMax()          const { return _max; }

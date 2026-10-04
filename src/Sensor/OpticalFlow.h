@@ -10,7 +10,7 @@
 // Estimator -- this class does not know how high the vehicle is and should not.
 // The conversion here is only pixels -> rate:
 //
-//     flow = (dpixels / dt) / FOCAL_PIXELS
+//     flow = (dpixels / dt) / FOCAL_PIXELS   // rad/s, FOCAL=385 (PixArt/PX4)
 //
 // WHY dt IS MEASURED HERE, when everything else uses cfg::loop::DT_S
 // ─────────────────────────────────────────────────────────────────────
@@ -29,13 +29,16 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct FlowData {
-    // Angular flow, 1/s. Multiply by height to get m/s.
+    // Angular flow, rad/s. Multiply by range to get m/s.
     float vx = 0.0f;
     float vy = 0.0f;
 
     // Raw pixel deltas, for diagnosing a blinded or unfocused sensor
     int16_t dx_px = 0;
     int16_t dy_px = 0;
+
+    // PMW3901 SQUAL. 0 = no surface lock (PX4 drops these).
+    uint8_t squal = 0;
 
     // Interval this sample was computed against
     float dt_s = 0.0f;
@@ -47,13 +50,6 @@ struct FlowData {
     float yInt = 0.0f;
 };
 
-// NOTE ON THE CHIP SELECT PIN
-// ───────────────────────────
-// This constructor deliberately takes no pin. The PMW3901 driver hardcodes
-// _cs = 29 in its own constructor and exposes no way to change it, so a pin
-// argument here would be accepted and silently ignored -- worse than not
-// offering one. cfg::pin::FLOW_CS records the value for reference only; moving
-// the sensor means editing lib/PWM3901/PMW3901.cpp.
 class OpticalFlow : public Sensor {
 public:
     OpticalFlow();

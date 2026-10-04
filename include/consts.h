@@ -65,11 +65,11 @@ namespace pin {
     constexpr uint8_t IMU_INT  = 8;
     constexpr uint8_t IMU_RST  = 9;
 
-    // DOCUMENTATION ONLY -- not passed to anything. The PMW3901 driver
-    // hardcodes _cs = 29 in its own constructor and takes no pin argument, so
-    // changing this constant does nothing. To move the flow sensor you have to
-    // edit lib/PWM3901/PMW3901.cpp.
-    constexpr uint8_t FLOW_CS = 29;
+    // PMW3901 on SPI1
+    constexpr uint8_t FLOW_CS   = 29;
+    constexpr uint8_t FLOW_MOSI = 26;
+    constexpr uint8_t FLOW_MISO = 1;
+    constexpr uint8_t FLOW_SCK  = 27;
 }
 
 // ── Vehicle ─────────────────────────────────────────────────────────────────
@@ -172,8 +172,9 @@ namespace gimbal {
     constexpr float TRAVEL_DEG = 8.0f;
     constexpr float TRAVEL_RAD = TRAVEL_DEG * unit::D2R;
 
+    // roll servo
     namespace x {
-        constexpr float P0 =  1559.2072714f;
+        constexpr float P0 =  1564.2072714f;
         constexpr float P1 =  38.0541193f;
         constexpr float P2 = -0.4495172f;
 
@@ -181,8 +182,9 @@ namespace gimbal {
         constexpr float MAX_DEG     =  TRAVEL_DEG;
         constexpr float NEUTRAL_DEG =  0.0f;
     }
+    // pitch servo
     namespace y {
-        constexpr float P0 =  1527.8333081f;
+        constexpr float P0 =  1568.8333081f;
         constexpr float P1 =  25.6989555f;
         constexpr float P2 = -0.0263025f;
 
@@ -195,6 +197,11 @@ namespace gimbal {
     // +/-TRAVEL_DEG lands inside these on both axes.
     constexpr uint16_t MIN_US = 1190;
     constexpr uint16_t MAX_US = 1950;
+
+    // Bench servo dance ('d'): one full circle at each amplitude.
+    constexpr float    DANCE_AMP_DEG[]     = { 8.0f, 7.0f, 5.0f, 4.0f, 2.0f };
+    constexpr uint8_t  DANCE_N_AMPS        = 5;
+    constexpr float    DANCE_PERIOD_S      = 2.0f;
 }
 
 // ── RCS ─────────────────────────────────────────────────────────────────────
@@ -293,14 +300,23 @@ namespace lidar {
 
 // ── Optical flow (PMW3901) ──────────────────────────────────────────────────
 namespace flow {
-    constexpr float FOV_DEG       = 42.0f;
-    // constexpr float FOCAL_PIXELS  = 412.27f;
-    constexpr float FOCAL_PIXELS  = 400.27f;
-    constexpr int   WIDTH_PIXELS  = 30;
+    constexpr float FOV_DEG      = 42.0f;
+    constexpr int   WIDTH_PIXELS = 30;
 
-    // Guard on the measured sample interval used to turn pixel counts into a
-    // rate. Outside this the sample is dropped -- protects against the first
-    // call after boot and against a stalled loop producing a huge velocity.
+    // PixArt / PX4 conversion: raw counts → radians. Not the geometric
+    // pinhole focal length (that comes out ~39 px). V0.1 used 412.27 from a
+    // bench fit; PX4's PMW3901 driver uses 385. Difference is ~7%.
+    constexpr float FOCAL_PIXELS = 385.0f;
+
+    // Datasheet working range. Below this the chip still returns counts but
+    // they do not scale with height. Lidar AGL can also go negative on the
+    // pad (mount offset), which inverted the old v = flow * zWorld scale.
+    constexpr float MIN_RANGE_M = 0.08f;
+    constexpr float MAX_RANGE_M = 30.0f;
+
+    // SQUAL floor. PX4 drops a sample when quality is 0.
+    constexpr uint8_t MIN_QUALITY = 1;
+
     constexpr float MIN_DT_S = 0.001f;
     constexpr float MAX_DT_S = 0.100f;
 
@@ -314,13 +330,23 @@ namespace flow {
 //
 // State: [x, y, z, vx, vy, vz]
 namespace est {
-    constexpr float K_POS      = 2.0000f;   // horizontal position <- pos meas
+    constexpr float K_POS      = 0.1000f;   // horizontal position <- pos meas
     constexpr float K_POS_VEL  = 0.0008f;   // horizontal cross term
     constexpr float K_Z        = 0.0768f;   // altitude <- lidar
     constexpr float K_Z_VZ     = 0.0850f;   // altitude <- vz
-    constexpr float K_VEL      = 2.0000f;   // horizontal velocity <- flow
+    constexpr float K_VEL      = 0.7000f;   // horizontal velocity <- flow
     constexpr float K_VZ_Z     = 1.0000f;   // vz <- lidar
     constexpr float K_VZ       = 0.0000f;   // vz <- vz  (unused, kept explicit)
+}
+
+// ── Waypoints ───────────────────────────────────────────────────────────────
+namespace wp {
+    // Fractions of the setpoint. 0.30 = ±30%. A zero axis uses altitude
+    // as the 100% reference (LAND uses the last hover altitude).
+    constexpr float WP_TOL_XY   = 0.30f;
+    constexpr float WP_TOL_Z    = 0.15f;
+    constexpr float LAND_TOL_XY = 0.33f;
+    constexpr float LAND_TOL_Z  = 0.010f;
 }
 
 // ── Controller ──────────────────────────────────────────────────────────────
@@ -358,6 +384,20 @@ namespace ctrl {
     // Abort if attitude exceeds this
     constexpr float MAX_TILT_DEG = 35.0f;
     constexpr float MAX_TILT_RAD = MAX_TILT_DEG * unit::D2R;
+
+    // Outer position LQR (V0.1 K_pos). State [x, y, vx, vy, xint, yint].
+    // Output is attitude setpoints in radians: roll from y, pitch from x.
+    namespace pos {
+        constexpr float K_Y    = -0.100031f;
+        constexpr float K_VY   = -0.1400f;
+        constexpr float K_YINT = -0.05000f;
+        constexpr float K_X    =  0.100031f;
+        constexpr float K_VX   =  0.1400f;
+        constexpr float K_XINT =  0.05000f;
+        constexpr float INT_LIM_M     = 0.35f;
+        constexpr float MAX_ATT_DEG   = 10.0f;
+        constexpr float MAX_ATT_RAD   = MAX_ATT_DEG * unit::D2R;
+    }
 }
 
 }  // namespace cfg

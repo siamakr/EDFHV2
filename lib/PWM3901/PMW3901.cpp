@@ -24,17 +24,14 @@
 
 #include <SPI.h>
 
-PMW3901::PMW3901(){ 
-  _cs = 29;   //38 for fworking pin on breadboard
+PMW3901::PMW3901(uint8_t csPin)
+{
+  _cs = csPin;
 }
 
 boolean PMW3901::begin(void) {
-  // Setup SPI port
-  //SPI1.setMISO(1);
-  //SPI1.setMOSI(26);
+  // SPI1 MOSI/MISO/SCK are set by OpticalFlow from cfg::pin before this.
   SPI1.setCS(_cs);
-  SPI1.setMISO(1);
-  SPI1.setSCK(27);
   SPI1.begin();
   pinMode(_cs, OUTPUT);
   SPI1.beginTransaction(SPISettings(4000000, MSBFIRST, SPI_MODE3));
@@ -75,9 +72,15 @@ boolean PMW3901::begin(void) {
 
 void PMW3901::readMotionCount(int16_t *deltaX, int16_t *deltaY)
 {
+  readMotionCount(deltaX, deltaY, nullptr);
+}
+
+void PMW3901::readMotionCount(int16_t *deltaX, int16_t *deltaY, uint8_t *squal)
+{
   registerRead(0x02);
   *deltaX = ((int16_t)registerRead(0x04) << 8) | registerRead(0x03);
   *deltaY = ((int16_t)registerRead(0x06) << 8) | registerRead(0x05);
+  if (squal) *squal = registerRead(0x07);
 }
 
 void PMW3901::enableFrameBuffer()

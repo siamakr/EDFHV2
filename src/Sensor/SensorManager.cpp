@@ -30,10 +30,11 @@ bool SensorManager::initialize()
 
 void SensorManager::sampleAll()
 {
-    // Latch each sensor's answer for this cycle. These flags stay valid until
-    // the next sampleAll(), so there is no "who clears the flag" ordering
-    // hazard -- V0.1 cleared status bits inside run_estimator(), which meant
-    // calling the estimator twice silently discarded measurements.
+    // Latch each sensor's answer for this cycle. Flow is sampled on its own
+    // 10 ms timer after this, so start the tick with flow consumed -- V0.1
+    // cleared data.status.flow inside the estimator; without that the same
+    // pixel-rate was fused on every 5 ms cycle.
+    _flowFresh  = false;
     _imuFresh   = _imu.sample();
     _lidarFresh = _lidar.sample();
     _timestampUs = micros();
