@@ -13,9 +13,11 @@ bool SensorManager::initialize()
     // Every sensor gets a chance to come up even if an earlier one failed --
     // no short-circuiting. A vehicle with a dead flow sensor should still be
     // able to hold attitude and altitude on the bench.
-    const bool imuOk   = _imu.initialize();
-    const bool lidarOk = _lidar.initialize();
+    // V0.1 setup(): flow, lidar, IMU.
     const bool flowOk  = _flow.initialize();
+    const bool lidarOk = _lidar.initialize();
+    delay(100);
+    const bool imuOk   = _imu.initialize();
 
     // Seed the attitude solution and capture the heading that counts as zero.
     if (imuOk) {
@@ -34,9 +36,12 @@ void SensorManager::sampleAll()
     // calling the estimator twice silently discarded measurements.
     _imuFresh   = _imu.sample();
     _lidarFresh = _lidar.sample();
-    _flowFresh  = _flow.sample();
-
     _timestampUs = micros();
+}
+
+void SensorManager::sampleFlow()
+{
+    _flowFresh = _flow.sample();
 }
 
 SensorFrame SensorManager::getFrame() const

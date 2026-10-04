@@ -2,6 +2,7 @@
 #include <Servo.h>
 #include <algorithm>
 #include <cfloat>
+#include <cstdint>
 
 class Actuator {
 public:
@@ -51,6 +52,18 @@ public:
     // Drive to the rest position.
     void neutral() { drive(_neutral); }
 
+    // Bypasses the regression and every limit. For ESC priming and other
+    // raw-pulse procedures only; never from the control loop.
+    void writeRaw(uint16_t us);
+
+    // Hard bounds on the pulse drive() may emit, applied after the
+    // regression. Does not affect the cutoff/off pulse or writeRaw(). The EDF
+    // uses this for its flight floor above the thrust notch.
+    void setPwmLimits(uint16_t minUs, uint16_t maxUs);
+
+    // Pulse last written to the pin, from any path.
+    uint16_t getLastPwmUs() const { return _lastUs; }
+
     float getCurrentValue() const { return _currentValue; }
     float getMin()          const { return _min; }
     float getMax()          const { return _max; }
@@ -63,6 +76,9 @@ public:
 protected:
     float toPwm(float value) const;
 
+    // Rounds, applies the PWM limits, writes, and records the pulse.
+    void writeRegressed(float value);
+
     Servo    _servo;
     uint8_t  _pin;
     float    _p0, _p1, _p2;
@@ -72,4 +88,7 @@ protected:
     float    _cutoff;
     uint16_t _offUs;
     bool     _cutOff;
+    uint16_t _minUs  = 0;
+    uint16_t _maxUs  = UINT16_MAX;
+    uint16_t _lastUs = 0;
 };

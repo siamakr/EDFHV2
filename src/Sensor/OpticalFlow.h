@@ -70,5 +70,5 @@ public:
 private:
     PMW3901  _flow;
     FlowData _d;
-    uint32_t _lastSampleUsFlow = 0;   // 0 = no previous sample yet
+    uint32_t _lastUs = 0;
 };

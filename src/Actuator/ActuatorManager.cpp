@@ -44,6 +44,12 @@ void ActuatorManager::setThrust(float newtons)
     _edf.drive(newtons);
 }
 
+void ActuatorManager::primeEdf(uint16_t us)
+{
+    if (!_armed) return;
+    _edf.writeRaw(us);
+}
+
 void ActuatorManager::setGimbal(float pitchDeg, float rollDeg)
 {
     _gimbalPitch.drive(pitchDeg);

@@ -25,61 +25,40 @@ bool Imu::initialize()
 
 bool Imu::sample()
 {
-    if (!_initialized || !_bno.dataAvailable()) {
-        return false;
-    }
+    if (!_initialized) return false;
+    if (!_bno.dataAvailable()) return false;
 
     applyMounting();
-
-    _d.yawRel_rad = wrapPi(_d.yaw_rad - _yawOrigin_rad);
-
     markSampled(micros());
     serviceCalibration(millis());
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The mounting transform. X and Y are exchanged on every triple, and roll and
-// pitch are exchanged on the Euler solution, because the part is mounted
-// rotated relative to the body.
-//
-// See the handedness warning in Imu.h before touching any of this: the
-// exchange is a reflection rather than a rotation, and the controller gains
-// were derived against it as-is.
-// ─────────────────────────────────────────────────────────────────────────────
 void Imu::applyMounting()
 {
     using namespace cfg::imu;
 
-    // ── Linear acceleration (m/s^2, gravity already removed) ──────────────
     _d.ayRaw_mps2 = _bno.getLinAccelX();
     _d.axRaw_mps2 = _bno.getLinAccelY();
     _d.azRaw_mps2 = _bno.getLinAccelZ();
-
     _d.ax_mps2 = iir(_d.axRaw_mps2, _d.ax_mps2, ALPHA_ACCEL);
     _d.ay_mps2 = iir(_d.ayRaw_mps2, _d.ay_mps2, ALPHA_ACCEL);
     _d.az_mps2 = iir(_d.azRaw_mps2, _d.az_mps2, ALPHA_ACCEL);
     _d.linAccuracy = _bno.getLinAccelAccuracy();
 
-    // ── Angular rate (rad/s) ──────────────────────────────────────────────
     _d.gx_rps = iir(_bno.getGyroY(), _d.gx_rps, ALPHA_GYRO);
     _d.gy_rps = iir(_bno.getGyroX(), _d.gy_rps, ALPHA_GYRO);
     _d.gz_rps = iir(_bno.getGyroZ(), _d.gz_rps, ALPHA_GYRO);
     _d.gyroAccuracy = _bno.getGyroAccuracy();
 
-    // ── Orientation quaternion, unmodified ────────────────────────────────
     _bno.getQuat(_d.qi, _d.qj, _d.qk, _d.qw,
                  _d.quatRadianAccuracy, _d.quatAccuracy);
 
-    // ── Euler attitude, plus fixed mount offsets ──────────────────────────
-    _d.roll_rad  = _bno.getPitch() + ROLL_OFFSET_RAD;
-    _d.pitch_rad = _bno.getRoll()  + PITCH_OFFSET_RAD;
-    _d.yaw_rad   = _bno.getYaw()   + YAW_OFFSET_RAD;
+    _d.roll_rad   = _bno.getPitch() + ROLL_OFFSET_RAD;
+    _d.pitch_rad  = _bno.getRoll()  + PITCH_OFFSET_RAD;
+    _d.yaw_rad    = _bno.getYaw()   + YAW_OFFSET_RAD;
+    _d.yawRel_rad = wrapPi(_d.yaw_rad - _yawOrigin_rad);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Calibration
-// ─────────────────────────────────────────────────────────────────────────────
 
 bool Imu::isFullyCalibrated() const
 {
@@ -96,29 +75,22 @@ uint32_t Imu::getCalibratedDwellMs() const
 
 void Imu::requestCalibrationSave()
 {
-    // Only a flag. The work happens in serviceCalibration(), inside sample().
     _savePending = true;
 }
 
 void Imu::serviceCalibration(uint32_t nowMs)
 {
-    // ── Track how long we have been fully calibrated ──────────────────────
     if (isFullyCalibrated()) {
-        if (_dwellStartMs == 0) {
-            _dwellStartMs = nowMs;
-        }
-        // Unattended save once the dwell is satisfied. Fires once.
+        if (_dwellStartMs == 0) _dwellStartMs = nowMs;
         if (_autoSaveEnabled && !_autoSaved &&
             (nowMs - _dwellStartMs) >= cfg::imu::CAL_DWELL_MS) {
             _savePending = true;
             _autoSaved   = true;
         }
     } else {
-        // Accuracy dropped -- the dwell has to start over.
         _dwellStartMs = 0;
     }
 
-    // ── Kick off a pending save ───────────────────────────────────────────
     if (_savePending && _calState != CalState::Saving) {
         _bno.saveCalibration();
         _bno.requestCalibrationStatus();
@@ -128,7 +100,6 @@ void Imu::serviceCalibration(uint32_t nowMs)
         return;
     }
 
-    // ── Await the acknowledgement, without blocking ───────────────────────
     if (_calState == CalState::Saving) {
         if (_bno.calibrationComplete()) {
             _calState = CalState::Saved;
@@ -138,8 +109,6 @@ void Imu::serviceCalibration(uint32_t nowMs)
         }
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 void Imu::setYawOrigin()
 {

@@ -1,4 +1,5 @@
 #include "Actuator.h"
+#include <math.h>
 
 Actuator::Actuator(uint8_t pin,
                    float p0, float p1, float p2,
@@ -32,13 +33,34 @@ void Actuator::drive(float value)
     if (value <= _cutoff) {
         _currentValue = _neutral;
         _cutOff       = true;
+        _lastUs       = _offUs;
         _servo.writeMicroseconds(_offUs);
         return;
     }
 
     _cutOff       = false;
     _currentValue = std::clamp(value, _min, _max);
-    _servo.writeMicroseconds((uint16_t)toPwm(_currentValue));
+    writeRegressed(_currentValue);
+}
+
+void Actuator::writeRegressed(float value)
+{
+    const long us = lroundf(toPwm(value));
+    _lastUs = (uint16_t)std::clamp<long>(us, _minUs, _maxUs);
+    _servo.writeMicroseconds(_lastUs);
+}
+
+void Actuator::writeRaw(uint16_t us)
+{
+    _cutOff = false;
+    _lastUs = us;
+    _servo.writeMicroseconds(us);
+}
+
+void Actuator::setPwmLimits(uint16_t minUs, uint16_t maxUs)
+{
+    _minUs = minUs;
+    _maxUs = maxUs;
 }
 
 // PWM = P0 + P1*x + P2*x^2

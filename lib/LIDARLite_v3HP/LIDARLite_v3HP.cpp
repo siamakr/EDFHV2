@@ -353,11 +353,7 @@ void LIDARLite_v3HP::write(uint8_t regAddr,  uint8_t * dataBytes,
     // Subsequent bytes are data writes
     Wire.write(dataBytes, numBytes);
 
-    // A nack means the device is not responding. Report the error over serial.
-    if ( Wire.endTransmission() )
-    {
-        Serial.println("> nack");
-    }
+    Wire.endTransmission();
 
     delayMicroseconds(100); // 100 us delay for robustness with successive reads and writes
 } /* LIDARLite_v3HP::write */

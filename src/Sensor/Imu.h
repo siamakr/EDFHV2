@@ -101,6 +101,9 @@ public:
     Imu(uint8_t csPin, uint8_t wakePin, uint8_t intPin, uint8_t rstPin);
 
     bool initialize() override;
+
+    // One packet, if the chip has one. Call on EVERY loop() pass -- if this
+    // stops, the BNO queue backs up and the values freeze.
     bool sample() override;
 
     // ── Data ──────────────────────────────────────────────────────────────
@@ -123,10 +126,7 @@ public:
     void setAutoSave(bool on) { _autoSaveEnabled = on; }
 
 private:
-    // Sensor -> body frame. The single place the mounting is expressed.
     void applyMounting();
-
-    // Non-blocking save state machine, serviced once per sample().
     void serviceCalibration(uint32_t nowMs);
 
     static float iir(float newSample, float prevOutput, float alpha)

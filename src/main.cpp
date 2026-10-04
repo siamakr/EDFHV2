@@ -28,13 +28,13 @@
 // bus, and that the estimator runs inside the 5 ms budget on real hardware.
 //
 // The flight state machine from V0.1 is preserved verbatim at
-// old-files/main_v0.1.cpp and is the reference for the rewrite. Two things
-// from docs/REBUILD_NOTES.md must change when porting it:
+// old-files/main_v0.1.cpp and is the reference for the rewrite. When porting:
 //
-//   - the estimator has to run BEFORE the controller. V0.1 called
-//     run_estimator() after the LQR, so z and vz were a full cycle stale.
+//   - keep the estimator BEFORE the controller, as V0.1 had it.
 //   - the yaw torque -> grams hop is gone. RCSActuator is calibrated
-//     directly in force, so do not reintroduce it.
+//     directly in Newtons, so do not reintroduce it.
+//   - prime with actuators.primeEdf(cfg::edf::PRIME_US) for PRIME_MS, not
+//     V0.1's 1250 us for 6 s.
 //
 // Serial is owned HERE and nowhere else. No sensor or actuator class reads
 // it. That is deliberate: in V0.1 the IMU calibration routine called
@@ -64,7 +64,8 @@ static Actuator gimbalY(cfg::pin::GIMBAL_Y,
 static RCSActuator rcs(cfg::pin::RCS,
                        cfg::rcs::P0, cfg::rcs::P1, cfg::rcs::P2,
                        cfg::rcs::MIN_N, cfg::rcs::MAX_N,
-                       cfg::vehicle::COM_TO_RCS_M);
+                       cfg::vehicle::COM_TO_RCS_M,
+                       cfg::rcs::CUTOFF_NM, cfg::rcs::OFF_US);
 
 // ActuatorManager names its gimbal channels pitch/roll; ControlAllocator names
 // them Y/X. They are the same two servos: the roll channel drives X and the
@@ -89,7 +90,40 @@ static ControlAllocator   allocator;
 
 // ── Loop scheduling ─────────────────────────────────────────────────────────
 static uint32_t lastTickUs = 0;
-static uint32_t overruns   = 0;
+static uint32_t lastFlowUs = 0;
+
+// ── Serial modes ────────────────────────────────────────────────────────────
+// main   : quiet bring-up (default).  m returns here.
+// inspect: IMU + lidar + estimator stream.  k enters here.
+enum class SerialMode : uint8_t { Main, Inspect };
+static SerialMode serialMode   = SerialMode::Main;
+static uint32_t   lastPrintUs  = 0;
+
+static void printInspectLine(uint32_t nowUs)
+{
+    const ImuData&        att = imu.getData();
+    const LidarData&      rng = lidar.getData();
+    const FlowData&       fl  = flow.getData();
+    const StateEstimate&  est = estimator.getState();
+    using cfg::unit::R2D;
+
+    char line[320];
+    snprintf(line, sizeof(line),
+        "imu  r=%6.2f p=%6.2f y=%6.2f  gx=%6.3f gy=%6.3f gz=%6.3f  "
+        "ax=%6.3f ay=%6.3f az=%6.3f  acc=%u/%u/%u\n"
+        "lid  z=%6.3f raw=%4u\n"
+        "flo  dx=%4d dy=%4d  vx=%6.3f vy=%6.3f\n"
+        "est  x=%6.3f y=%6.3f z=%6.3f  vx=%6.3f vy=%6.3f vz=%6.3f\n",
+        att.roll_rad  * R2D, att.pitch_rad * R2D, att.yaw_rad * R2D,
+        att.gx_rps, att.gy_rps, att.gz_rps,
+        att.ax_mps2, att.ay_mps2, att.az_mps2,
+        att.linAccuracy, att.gyroAccuracy, att.quatAccuracy,
+        rng.z_m, rng.raw_cm,
+        (int)fl.dx_px, (int)fl.dy_px, fl.vx, fl.vy,
+        est.x_m, est.y_m, est.z_m,
+        est.vx_mps, est.vy_mps, est.vz_mps);
+    Serial.print(line);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The single reader of the serial port. Add flight commands here as the state
@@ -100,10 +134,17 @@ static void handleSerialCommands()
     if (!Serial.available()) return;
 
     switch (Serial.read()) {
+        case 'k':
+            serialMode = SerialMode::Inspect;
+            Serial.println("mode: inspect  (m = main)");
+            break;
+
+        case 'm':
+            serialMode = SerialMode::Main;
+            Serial.println("mode: main  (k = inspect)");
+            break;
+
         case 's':
-            // Manual override. Not normally needed -- Imu saves by itself once
-            // all three accuracies have held at 3 for CAL_DWELL_MS, which is
-            // the condition you are watching for while rotating the box.
             imu.requestCalibrationSave();
             break;
 
@@ -129,7 +170,8 @@ void setup()
     // Actuators first, and before anything can command them. initialize()
     // attaches and immediately drives each channel to its rest position --
     // the Servo library latches 1500 us on attach(), which on this EDF is
-    // about 21 N of thrust.
+    // about 21 N of thrust. EDF and RCS both land on their 900 us off pulse.
+    edf.setPwmLimits(cfg::edf::FLIGHT_MIN_US, cfg::edf::MAX_US);
     actuators.initialize();
 
     const bool sensorsOk = sensors.initialize();
@@ -139,46 +181,42 @@ void setup()
     Serial.print("  imu   "); Serial.println(imu.isInitialized());
     Serial.print("  lidar "); Serial.println(lidar.isInitialized());
     Serial.print("  flow  "); Serial.println(flow.isInitialized());
+    Serial.println("k = inspect   m = main");
 
     estimator.reset();
-    lastTickUs = micros();
+    lastTickUs = lastFlowUs = micros();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 void loop()
 {
-    const uint32_t now     = micros();
-    const uint32_t elapsed = now - lastTickUs;
+    // V0.1: sample the BNO on every pass, before anything else. A Serial
+    // print here will stall this and freeze the attitude.
+    imu.sample();
 
-    if (elapsed < cfg::loop::DT_US) return;
+    const uint32_t now = micros();
+    if (now - lastTickUs < cfg::loop::DT_US) return;
     lastTickUs = now;
-
-    // The estimator integrates against a fixed DT_S. If the loop fell far
-    // enough behind that the real interval no longer resembles it, tell the
-    // estimator to hold rather than step on a bad dt.
-    if (elapsed > cfg::loop::DT_MAX_US) {
-        estimator.flagOverrun();
-        ++overruns;
-    }
 
     handleSerialCommands();
 
-    // Estimate BEFORE control -- see the note at the top of this file.
     sensors.sampleAll();
+    if (now - lastFlowUs >= cfg::loop::DT_US * 2) {
+        lastFlowUs = now;
+        sensors.sampleFlow();
+    }
     estimator.update(sensors.getFrame());
 
+    const ImuData& att = imu.getData();
     const StateEstimate& state = estimator.getState();
-    const ImuData&       att   = imu.getData();
-
-    // The control law runs so its timing is representative, but the result is
-    // deliberately discarded: there is no arming logic yet, and setGimbal() on
-    // ActuatorManager is NOT gated by the armed flag. Wiring the allocator
-    // output through to the actuators is the job of the state machine.
     BLA::Matrix<4, 1> u = attitude.update(att.roll_rad, att.pitch_rad, att.yaw_rad,
                                           att.gx_rps, att.gy_rps, att.gz_rps,
                                           state.z_m, state.vz_mps);
-
     const float uArr[4] = { u(0), u(1), u(2), u(3) };
-    const AllocatorOutput cmd = allocator.allocate(uArr);
-    (void)cmd;
+    (void)allocator.allocate(uArr);
+
+    if (serialMode == SerialMode::Inspect && (now - lastPrintUs) >= 100000) {
+        lastPrintUs = now;
+        printInspectLine(now);
+    }
 }

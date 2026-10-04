@@ -65,8 +65,14 @@ public:
     // which one failed.
     bool initialize();
 
-    // Polls all three. Call once per control cycle, before the estimator.
+    // IMU only -- call on every loop() pass, before any timer gate.
+    void pollImu() { _imu.sample(); }
+
+    // Lidar + one more IMU read. Call on the 5 ms tick.
     void sampleAll();
+
+    // V0.1 ran flow at half rate (10 ms). Call on that timer, not from sampleAll().
+    void sampleFlow();
 
     // ── Measurements ──────────────────────────────────────────────────────
     SensorFrame getFrame() const;

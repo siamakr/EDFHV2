@@ -39,10 +39,14 @@ public:
     // minForce   : per-motor force lower limit (N)
     // maxForce   : per-motor force upper limit (N)
     // momentArm  : COM-to-RCS distance in metres
+    // cutoffNm / offUs : a torque at or below cutoffNm writes offUs raw, so
+    //              neutral() holds the ESCs below their arming threshold.
     RCSActuator(uint8_t pin,
                 float p0, float p1, float p2,
                 float minForce, float maxForce,
-                float momentArm);   // neutral is fixed at 0 N*m
+                float momentArm,    // neutral is fixed at 0 N*m
+                float cutoffNm = -FLT_MAX,
+                uint16_t offUs = 0);
 
     // value is VEHICLE torque in N*m
     void drive(float torque_Nm) override;

@@ -57,11 +57,13 @@ namespace pin {
     constexpr uint8_t EDF      = 36;
     constexpr uint8_t RCS      = 37;   // shared line, both BLDCs (V0.1's RW pin)
 
-    // Sensors (SPI)
+    // Sensors (SPI). Matches the flight-proven wiring in EDFH_V0.1 and the
+    // most recent Teststand_TEENSY build -- main's Config.h had WAK and RST
+    // swapped.
     constexpr uint8_t IMU_CS   = 10;
-    constexpr uint8_t IMU_WAK  = 9;
+    constexpr uint8_t IMU_WAK  = 7;
     constexpr uint8_t IMU_INT  = 8;
-    constexpr uint8_t IMU_RST  = 7;
+    constexpr uint8_t IMU_RST  = 9;
 
     // DOCUMENTATION ONLY -- not passed to anything. The PMW3901 driver
     // hardcodes _cs = 29 in its own constructor and takes no pin argument, so
@@ -145,6 +147,18 @@ namespace edf {
     constexpr uint16_t IDLE_US          = 1560;
     constexpr uint16_t MAX_SUSTAINED_US = 1730;   // thermal limit
     constexpr uint16_t MAX_US           = 2000;   // burst only
+
+    // Hard PWM floor for any in-flight command, applied AFTER the regression
+    // as a second guard on top of MIN_N. Must sit above the notch, whose last
+    // bad sample is 1530 us (23.13 N, lower than 1520's 23.28 N). 1547 us is
+    // where MIN_N lands on the fit, so in normal operation the two agree.
+    constexpr uint16_t FLIGHT_MIN_US = 1547;
+
+    // Spin-up before handing over to the controller: the fan is brought
+    // straight to the flight floor so it never dwells in the notch.
+    // ~25.6 N, about 63% of hover -- the vehicle stays on the pad.
+    constexpr uint16_t PRIME_US = FLIGHT_MIN_US;
+    constexpr uint32_t PRIME_MS = 2000;
 }
 
 // ── Gimbal ──────────────────────────────────────────────────────────────────
@@ -210,13 +224,20 @@ namespace rcs {
     // Torque authority of the pair, derived from force limit and moment arm.
     constexpr float MAX_TORQUE_NM = 2.0f * MAX_N * vehicle::COM_TO_RCS_M;
 
+    // A command at or below CUTOFF_NM writes OFF_US instead of going through
+    // the regression, so neutral()/init/disarm hold the ESCs below 1000 us
+    // (same as Teststand). Zero torque in flight lands here too; 1101 us and
+    // 900 us are both no thrust.
+    constexpr float    CUTOFF_NM = 0.0f;
+    constexpr uint16_t OFF_US    = 900;
+
     constexpr uint16_t MIN_US = 1100;
     constexpr uint16_t MAX_US = 1800;
 }
 
 // ── IMU (BNO080) ────────────────────────────────────────────────────────────
 namespace imu {
-    // Body mount offsets, subtracted from the raw attitude solution. These
+    // Body mount offsets, ADDED to the raw attitude solution (as V0.1). These
     // were loose consts in Sensors.h in V0.1.
     constexpr float ROLL_OFFSET_DEG  = 1.3772f;
     constexpr float PITCH_OFFSET_DEG = 0.6578f;
@@ -240,7 +261,7 @@ namespace imu {
 
     // Report cadence requested from the BNO, and SPI clock.
     constexpr uint16_t REPORT_INTERVAL_MS = (uint16_t)loop::DT_MS;
-    constexpr uint32_t SPI_HZ             = 4000000;
+    constexpr uint32_t SPI_HZ             = 3000000;  // BNO080 max; Teststand uses this
 
     // Attitude is the one measurement the vehicle cannot fly without, so the
     // staleness window is tight: 10 missed cycles.
@@ -258,9 +279,11 @@ namespace lidar {
     // reading so z is measured from the ground contact point.
     constexpr float MOUNT_OFFSET_M = 0.08f;
 
-    // Readings outside this are rejected as dropouts rather than fed to the
-    // estimator. The v3HP returns 0 or a wild value when it loses the surface.
-    constexpr float MIN_VALID_M = 0.02f;
+    // A raw reading of 0 cm is the v3HP's dropout code and is always rejected.
+    // Otherwise the floor is the mount offset itself: sitting on the pad, z
+    // is ~0 and can read slightly negative, and those readings must reach the
+    // estimator so it is seeded before liftoff.
+    constexpr float MIN_VALID_M = -MOUNT_OFFSET_M;
     constexpr float MAX_VALID_M = 20.0f;
 
     // Acquisition is slower than the control loop and readings are dropped on
@@ -271,7 +294,8 @@ namespace lidar {
 // ── Optical flow (PMW3901) ──────────────────────────────────────────────────
 namespace flow {
     constexpr float FOV_DEG       = 42.0f;
-    constexpr float FOCAL_PIXELS  = 412.27f;
+    // constexpr float FOCAL_PIXELS  = 412.27f;
+    constexpr float FOCAL_PIXELS  = 400.27f;
     constexpr int   WIDTH_PIXELS  = 30;
 
     // Guard on the measured sample interval used to turn pixel counts into a
@@ -290,11 +314,11 @@ namespace flow {
 //
 // State: [x, y, z, vx, vy, vz]
 namespace est {
-    constexpr float K_POS      = 0.1000f;   // horizontal position <- pos meas
+    constexpr float K_POS      = 2.0000f;   // horizontal position <- pos meas
     constexpr float K_POS_VEL  = 0.0008f;   // horizontal cross term
     constexpr float K_Z        = 0.0768f;   // altitude <- lidar
     constexpr float K_Z_VZ     = 0.0850f;   // altitude <- vz
-    constexpr float K_VEL      = 0.7000f;   // horizontal velocity <- flow
+    constexpr float K_VEL      = 2.0000f;   // horizontal velocity <- flow
     constexpr float K_VZ_Z     = 1.0000f;   // vz <- lidar
     constexpr float K_VZ       = 0.0000f;   // vz <- vz  (unused, kept explicit)
 }

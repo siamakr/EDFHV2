@@ -33,10 +33,8 @@
 //
 // ORDERING -- read this before wiring main
 // ────────────────────────────────────────
-// update() must run BEFORE the controller, every cycle. In V0.1 run_estimator()
-// was called after the LQR, so the controller consumed a vz and z that were one
-// full cycle (5 ms) old. At 200 Hz on an altitude loop that is a real phase
-// lag, and it shows up as altitude hunting.
+// update() must run BEFORE the controller, every cycle, as it did in V0.1.
+// Run after, the controller consumes a z and vz one full cycle (5 ms) old.
 //
 // TELEMETRY
 // ─────────

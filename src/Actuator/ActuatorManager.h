@@ -44,6 +44,11 @@ public:
 
     // ── Vehicle-level commands ────────────────────────────────────────────
     void setThrust(float newtons);                  // ignored while disarmed
+
+    // Writes a raw spin-up pulse to the EDF, bypassing the regression.
+    // Ignored while disarmed. Non-blocking: the caller holds it for
+    // cfg::edf::PRIME_MS and then hands over to setThrust().
+    void primeEdf(uint16_t us);
     void setGimbal(float pitchDeg, float rollDeg);
     void setYawTorque(float torqueNm);
 
