@@ -101,14 +101,16 @@ static uint32_t lastFlowUs = 0;
 // inspect: IMU + lidar + estimator stream.  k enters here.
 // servo  : manual gimbal PWM.  c enters here.  z/x roll, t/y pitch, 5 us.
 // dance  : one circle at 7, 4, then 2 deg.  d starts it.
+// edf    : manual EDF thrust.  e enters here.  0 = off, 1-6 = 10-60 N.
 // waypoint: runs the mission table.  w enters here.
-enum class SerialMode : uint8_t { Main, Inspect, Servo, Dance, Waypoint };
+enum class SerialMode : uint8_t { Main, Inspect, Servo, Dance, Edf, Waypoint };
 static SerialMode serialMode   = SerialMode::Main;
 static uint32_t   lastPrintUs  = 0;
 static uint16_t   servoRollUs  = 0;
 static uint16_t   servoPitchUs = 0;
 static uint8_t    danceAmpIdx  = 0;
 static float      danceTheta   = 0.0f;
+static float      edfCmd_N     = 0.0f;
 
 // ── Waypoints ───────────────────────────────────────────────────────────────
 struct Waypoint {
@@ -126,10 +128,10 @@ static const struct {
     float alt_m, x_m, y_m, dwell_s;
 } mission[] = {
     // name, alt_m, x_m, y_m, dwell_s
-    { "HOVER 1", 0.50f, 0.00f, 0.00f, 5.0f },
-    { "HOVER 2", 0.50f, 0.00f, 1.50f, 5.0f },
+    { "HOVER 1", 0.30f, 0.00f, 0.00f, 2.5f },
+    // { "HOVER 2", 0.50f, 1.00f, 0.00f, 5.0f },
     // { "HOVER 2", 0.50f, 0.00f, 0.00f, 5.0f },
-    // { "HOVER 3", 0.50f, 0.50f, 0.00f, 5.0f },
+    // { "HOVER 3", 0.50f, 1.50f, 0.00f, 5.0f },
     // { "HOVER 4", 0.50f, 0.00f, 0.00f, 5.0f },
     { "LAND",  0.00f, 0.00f, 0.00f, 0.0f },
 };
@@ -229,6 +231,7 @@ static void startWaypointMission()
     wpLanded           = false;
     landingConfirmed   = false;
     position.reset();
+    actuators.arm();
     waypoint(1, mission[0].name, mission[0].alt_m,
              mission[0].x_m, mission[0].y_m, mission[0].dwell_s);
 }
@@ -285,6 +288,30 @@ static void printServoLine()
         "roll  %+6.2f deg  %4u us    pitch  %+6.2f deg  %4u us\n",
         gimbalX.getCurrentValue(), gimbalX.getLastPwmUs(),
         gimbalY.getCurrentValue(), gimbalY.getLastPwmUs());
+    Serial.print(line);
+}
+
+static uint16_t edfThrustToUs(float n)
+{
+    if (n <= cfg::edf::CUTOFF_N) return cfg::edf::OFF_US;
+    long us = lroundf(cfg::edf::P0 + cfg::edf::P1 * n + cfg::edf::P2 * n * n);
+    if (us < (long)cfg::edf::OFF_US) us = cfg::edf::OFF_US;
+    if (us > (long)cfg::edf::MAX_US) us = cfg::edf::MAX_US;
+    return (uint16_t)us;
+}
+
+static void setEdfTestThrust(float n)
+{
+    edfCmd_N = n;
+    edf.writeRaw(edfThrustToUs(n));
+}
+
+static void printEdfLine()
+{
+    char line[80];
+    snprintf(line, sizeof(line),
+        "edf  cmd=%4.0f N  %4u us\n",
+        edfCmd_N, edf.getLastPwmUs());
     Serial.print(line);
 }
 
@@ -357,11 +384,13 @@ static void handleSerialCommands()
 
     switch (ch) {
         case 'k':
+            if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
             serialMode = SerialMode::Inspect;
             Serial.println("mode: inspect  (m = main)");
             break;
 
         case 'c':
+            if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
             serialMode   = SerialMode::Servo;
             servoRollUs  = gimbalX.getLastPwmUs();
             servoPitchUs = gimbalY.getLastPwmUs();
@@ -369,13 +398,25 @@ static void handleSerialCommands()
             break;
 
         case 'd':
+            if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
             serialMode  = SerialMode::Dance;
             danceAmpIdx = 0;
             danceTheta  = 0.0f;
             Serial.println("mode: dance  7 / 4 / 2 deg  (m = abort)");
             break;
 
+        case 'e':
+            if (serialMode == SerialMode::Waypoint) abortWaypointMission();
+            if (serialMode == SerialMode::Servo || serialMode == SerialMode::Dance) {
+                parkGimbals();
+            }
+            serialMode = SerialMode::Edf;
+            setEdfTestThrust(0.0f);
+            Serial.println("mode: edf  0 = off  1-6 = 10-60 N  m = main");
+            break;
+
         case 'w':
+            if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
             serialMode = SerialMode::Waypoint;
             startWaypointMission();
             Serial.println("mode: waypoint  (m = abort)");
@@ -388,8 +429,11 @@ static void handleSerialCommands()
             if (serialMode == SerialMode::Waypoint) {
                 abortWaypointMission();
             }
+            actuators.disarm();
+            rcs.neutral();
+            edf.writeRaw(cfg::edf::OFF_US);
             serialMode = SerialMode::Main;
-            Serial.println("mode: main  (k = inspect  c = servo  d = dance  w = waypoint)");
+            Serial.println("mode: main  (k = inspect  c = servo  d = dance  e = edf  w = waypoint)");
             break;
 
         case 's':
@@ -415,6 +459,8 @@ static void handleSerialCommands()
                     case 'y': nudgeServo(servoPitchUs, gimbalY, +5); break;
                     default: break;
                 }
+            } else if (serialMode == SerialMode::Edf && ch >= '0' && ch <= '6') {
+                setEdfTestThrust((float)(ch - '0') * 10.0f);
             }
             break;
     }
@@ -439,9 +485,10 @@ void setup()
     Serial.print("  imu   "); Serial.println(imu.isInitialized());
     Serial.print("  lidar "); Serial.println(lidar.isInitialized());
     Serial.print("  flow  "); Serial.println(flow.isInitialized());
-    Serial.println("k = inspect   c = servo   d = dance   w = waypoint   m = main");
+    Serial.println("k = inspect   c = servo   d = dance   e = edf   w = waypoint   m = main");
 
     estimator.reset();
+    actuators.safeAll();
     lastTickUs = lastFlowUs = micros();
 }
 
@@ -493,13 +540,21 @@ void loop()
         rcs.neutral();
         gimbalX.neutral();
         gimbalY.neutral();
-    } else if (serialMode != SerialMode::Servo
-               && serialMode != SerialMode::Dance) {
+    } else if (serialMode == SerialMode::Waypoint && actuators.isArmed()) {
         actuators.setGimbal(cmd.gimbalY_deg, cmd.gimbalX_deg);
         actuators.setYawTorque(cmd.yawTorque_Nm);
-        if (serialMode == SerialMode::Waypoint && actuators.isArmed()) {
-            actuators.setThrust(cmd.thrust_N);
-        }
+        actuators.setThrust(cmd.thrust_N);
+    } else if (serialMode == SerialMode::Edf) {
+        rcs.neutral();
+        gimbalX.neutral();
+        gimbalY.neutral();
+        edf.writeRaw(edfThrustToUs(edfCmd_N));
+    } else if (serialMode != SerialMode::Servo
+               && serialMode != SerialMode::Dance) {
+        // Main / inspect: propulsion stays off. Gimbals still follow attitude.
+        rcs.neutral();
+        edf.writeRaw(cfg::edf::OFF_US);
+        actuators.setGimbal(cmd.gimbalY_deg, cmd.gimbalX_deg);
     }
 
     if (serialMode == SerialMode::Dance) stepDance();
@@ -508,6 +563,7 @@ void loop()
         lastPrintUs = now;
         if (serialMode == SerialMode::Inspect) printInspectLine(now);
         else if (serialMode == SerialMode::Servo || serialMode == SerialMode::Dance) printServoLine();
+        else if (serialMode == SerialMode::Edf) printEdfLine();
         else if (serialMode == SerialMode::Waypoint) printWaypointLine();
     }
 }

@@ -358,12 +358,13 @@ namespace ctrl {
 
     constexpr float K_ROLL  = 0.3700f;
     constexpr float K_PITCH = K_ROLL;
-    constexpr float K_YAW   = 0.0316f;
+    // constexpr float K_YAW   = 0.0316f;
+    constexpr float K_YAW   = -0.3516f;
     constexpr float K_GX    = 0.1240f;
     constexpr float K_GY    = K_GX;
-    constexpr float K_GZ    = 0.0561f;
-    constexpr float K_Z     = 1.1000f;
-    constexpr float K_VZ    = 5.6942f;
+    constexpr float K_GZ    = -0.1561f;
+    constexpr float K_Z     = 3.1000f;
+    constexpr float K_VZ    = 8.6942f;
 
     // Output limits. Aliases, so the controller and the actuator physically
     // cannot clamp to different numbers.
