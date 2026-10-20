@@ -78,11 +78,10 @@ namespace vehicle {
     constexpr float G_MS2        = 9.807f;
     constexpr float WEIGHT_N     = MASS_KG * G_MS2;   // 40.441 N hover thrust
 
-    constexpr float COM_TO_TVC_M = 0.3302f;
-    constexpr float COM_TO_RCS_M = 0.12f;         // V0.1 LENGTH_RW_M; confirm
+    constexpr float COM_TO_TVC_M = 0.3382f;
+    constexpr float COM_TO_RCS_M = 0.15f;         // V0.1 LENGTH_RW_M; confirm
                                                   // it still holds for the
                                                   // BLDC pair
-    constexpr float COM_TO_EDF_M = 0.050f;
 
     // Mass moment of inertia
     constexpr float JXX = 0.0058595f;       // From V0.1, not yet measured
