@@ -348,6 +348,31 @@ namespace wp {
     constexpr float LAND_TOL_Z  = 0.010f;
 }
 
+// ── Logging ─────────────────────────────────────────────────────────────────
+namespace log {
+    // Built-in SD. Host capture is scripts/serial_log.py -> Data/.
+    constexpr bool SD_ENABLE = false;
+}
+
+// ── Static attitude hold-down (gimbal fixture) ──────────────────────────────
+// Vehicle attitude setpoints, degrees. One dwell for every row. No in-band
+// wait -- the clock starts the instant the step is loaded. When the list is
+// done the EDF is cut. RCS is not driven in this mode.
+namespace attTest {
+    constexpr float DWELL_S = 5.0f;
+
+    // { roll_deg, pitch_deg }
+    constexpr float SETPOINTS[][2] = {
+        {  0.0f,  0.0f },
+        {  4.0f,  0.0f },
+        { -4.0f,  0.0f },
+        {  0.0f,  4.0f },
+        {  0.0f, -4.0f },
+        {  0.0f,  0.0f },
+    };
+    constexpr uint8_t N = sizeof(SETPOINTS) / sizeof(SETPOINTS[0]);
+}
+
 // ── Controller ──────────────────────────────────────────────────────────────
 namespace ctrl {
     // LQR state order: [roll, pitch, yaw, gx, gy, gz, z, vz]

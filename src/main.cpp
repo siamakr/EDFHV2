@@ -1,6 +1,5 @@
 #include <Arduino.h>
 #include <math.h>
-#include <string.h>
 
 #include "consts.h"
 
@@ -17,6 +16,8 @@
 #include "AttitudeController.h"
 #include "PositionController.h"
 #include "ControlAllocator.h"
+#include "Wayfinder.h"
+#include "DataLog.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BRING-UP SKELETON -- NOT A FLIGHT PROGRAM
@@ -91,6 +92,8 @@ static Estimator     estimator;
 static AttitudeController attitude;
 static PositionController position;
 static ControlAllocator   allocator;
+static Wayfinder          wayfinder(position, attitude, actuators, edf, imu);
+static DataLog            dataLog;
 
 // ── Loop scheduling ─────────────────────────────────────────────────────────
 static uint32_t lastTickUs = 0;
@@ -103,7 +106,8 @@ static uint32_t lastFlowUs = 0;
 // dance  : one circle at 7, 4, then 2 deg.  d starts it.
 // edf    : manual EDF thrust.  e enters here.  0 = off, 1-6 = 10-60 N.
 // waypoint: runs the mission table.  w enters here.
-enum class SerialMode : uint8_t { Main, Inspect, Servo, Dance, Edf, Waypoint };
+// pick   : wayfinder mode.  n enters here.  f = flight, a = attitude test.
+enum class SerialMode : uint8_t { Main, Inspect, Servo, Dance, Edf, Waypoint, Pick };
 static SerialMode serialMode   = SerialMode::Main;
 static uint32_t   lastPrintUs  = 0;
 static uint16_t   servoRollUs  = 0;
@@ -111,139 +115,6 @@ static uint16_t   servoPitchUs = 0;
 static uint8_t    danceAmpIdx  = 0;
 static float      danceTheta   = 0.0f;
 static float      edfCmd_N     = 0.0f;
-
-// ── Waypoints ───────────────────────────────────────────────────────────────
-struct Waypoint {
-    uint8_t number  = 0;
-    char    name[16] = {};
-    float   alt_m   = 0.0f;
-    float   x_m     = 0.0f;
-    float   y_m     = 0.0f;
-    float   dwell_s = 0.0f;
-    bool    isLand  = false;
-};
-
-static const struct {
-    const char* name;
-    float alt_m, x_m, y_m, dwell_s;
-} mission[] = {
-    // name, alt_m, x_m, y_m, dwell_s
-    { "HOVER 1", 0.30f, 0.00f, 0.00f, 2.5f },
-    // { "HOVER 2", 0.50f, 1.00f, 0.00f, 5.0f },
-    // { "HOVER 2", 0.50f, 0.00f, 0.00f, 5.0f },
-    // { "HOVER 3", 0.50f, 1.50f, 0.00f, 5.0f },
-    // { "HOVER 4", 0.50f, 0.00f, 0.00f, 5.0f },
-    { "LAND",  0.00f, 0.00f, 0.00f, 0.0f },
-};
-static constexpr uint8_t missionLen = sizeof(mission) / sizeof(mission[0]);
-
-static Waypoint wp;
-static bool     wpActive   = false;
-static bool     wpComplete = false;
-static bool     wpLanded            = false;
-static bool     landingConfirmed    = false;
-static uint32_t wpInBandUs  = 0;
-static uint8_t  wpIndex     = 0;
-static float    wpPrevAlt_m = 0.0f;
-
-static bool inTolPct(float meas, float target, float frac, float zeroScale)
-{
-    const float scale = (fabsf(target) > 1e-4f) ? fabsf(target) : zeroScale;
-    return fabsf(meas - target) <= frac * scale;
-}
-
-static void waypoint(uint8_t number, const char* name,
-                     float alt_m, float x_m, float y_m, float dwell_s)
-{
-    wp = Waypoint{};
-    wp.number  = number;
-    strncpy(wp.name, name ? name : "", sizeof(wp.name) - 1);
-    wp.isLand  = (strcmp(wp.name, "LAND") == 0);
-    wp.alt_m   = wp.isLand ? 0.0f : alt_m;
-    wp.x_m     = wp.isLand ? 0.0f : x_m;
-    wp.y_m     = wp.isLand ? 0.0f : y_m;
-    wp.dwell_s = dwell_s;
-
-    wpActive   = true;
-    wpComplete = false;
-    wpLanded         = false;
-    landingConfirmed = false;
-    wpInBandUs = 0;
-    if (!wp.isLand) wpPrevAlt_m = wp.alt_m;
-
-    position.setReference(wp.x_m, wp.y_m);
-    position.reset();
-    attitude.setZRef(wp.alt_m);
-}
-
-static void serviceWaypoint(const StateEstimate& est)
-{
-    if (!wpActive || wpComplete) return;
-
-    const float scale = wp.isLand ? wpPrevAlt_m : fabsf(wp.alt_m);
-    const float xyF   = wp.isLand ? cfg::wp::LAND_TOL_XY : cfg::wp::WP_TOL_XY;
-    const float zF    = wp.isLand ? cfg::wp::LAND_TOL_Z  : cfg::wp::WP_TOL_Z;
-    const float zTol  = zF * ((scale > 1e-4f) ? scale : 1.0f);
-    const bool xyIn   = inTolPct(est.x_m, wp.x_m, xyF, scale)
-                     && inTolPct(est.y_m, wp.y_m, xyF, scale);
-    // On the pad z is often slightly negative. Treat "at or below" the
-    // land height as down -- do not require a ± band that misses -1 cm.
-    const bool zIn    = wp.isLand
-                        ? (est.z_m <= wp.alt_m + zTol)
-                        : inTolPct(est.z_m, wp.alt_m, zF, scale);
-    const bool inBand = xyIn && zIn;
-
-    attitude.setZRef(wp.alt_m);
-
-    if (wp.isLand && inBand) {
-        landingConfirmed = true;
-        wpLanded         = true;
-        wpComplete       = true;
-        actuators.disarm();
-        actuators.safeAll();
-        edf.writeRaw(cfg::edf::OFF_US);
-        return;
-    }
-
-    if (!inBand) {
-        wpInBandUs = 0;
-        return;
-    }
-
-    wpInBandUs += cfg::loop::DT_US;
-
-    if ((wpInBandUs / 1000000.0f) >= wp.dwell_s) {
-        wpComplete = true;
-        if (wpIndex + 1 < missionLen) {
-            ++wpIndex;
-            waypoint(wpIndex + 1, mission[wpIndex].name,
-                     mission[wpIndex].alt_m, mission[wpIndex].x_m,
-                     mission[wpIndex].y_m, mission[wpIndex].dwell_s);
-        }
-    }
-}
-
-static void startWaypointMission()
-{
-    imu.setYawOrigin();
-    attitude.setYawRef(0.0f);
-    wpIndex            = 0;
-    wpLanded           = false;
-    landingConfirmed   = false;
-    position.reset();
-    actuators.arm();
-    waypoint(1, mission[0].name, mission[0].alt_m,
-             mission[0].x_m, mission[0].y_m, mission[0].dwell_s);
-}
-
-static void abortWaypointMission()
-{
-    wpActive   = false;
-    wpComplete = true;
-    actuators.disarm();
-    actuators.safeAll();
-    edf.writeRaw(cfg::edf::OFF_US);
-}
 
 static void parkGimbals()
 {
@@ -317,31 +188,24 @@ static void printEdfLine()
 
 static void printWaypointLine()
 {
-    const StateEstimate& est = estimator.getState();
-    const ImuData&       att = imu.getData();
-    const auto&          u   = attitude.getLastOutput();
-    using cfg::unit::R2D;
-
+    const auto& u = attitude.getLastOutput();
     const float gimbX = isfinite(u(0)) ? (float)u(0) : gimbalX.getCurrentValue();
     const float gimbY = isfinite(u(1)) ? (float)u(1) : gimbalY.getCurrentValue();
-
     char line[240];
-    snprintf(line, sizeof(line),
-        "wp %u %s  tgt x=%5.2f y=%5.2f z=%5.2f m  "
-        "est x=%6.3f y=%6.3f z=%6.3f m  t=%4.1f/%4.1f%s  "
-        "r=%6.2f p=%6.2f y=%6.2f  gimb x=%+5.2f y=%+5.2f  "
-        "yawT=%5.3f Nm  F=%5.1f N  edf=%4u us%s\n",
-        (unsigned)wp.number, wp.name,
-        wp.x_m, wp.y_m, wp.alt_m,
-        est.x_m, est.y_m, est.z_m,
-        wpInBandUs / 1000000.0f, wp.dwell_s,
-        landingConfirmed ? "  LANDING_CONFIRMED" : (wpLanded ? "  LANDED" : (wpComplete ? "  done" : "")),
-        att.roll_rad * R2D, att.pitch_rad * R2D, att.yawRel_rad * R2D,
-        gimbX, gimbY, (float)u(2),
-        landingConfirmed ? 0.0f : (float)u(3),
-        edf.getLastPwmUs(),
-        landingConfirmed ? "  CUT" : "");
+    wayfinder.formatLine(line, sizeof(line),
+                         estimator.getState(), imu.getData(),
+                         gimbX, gimbY, edf.getLastPwmUs());
     Serial.print(line);
+
+    if (dataLog.isOpen()) {
+        char csv[280];
+        wayfinder.formatCsv(csv, sizeof(csv),
+                            estimator.getState(), imu.getData(),
+                            gimbX, gimbY,
+                            gimbalX.getLastPwmUs(), gimbalY.getLastPwmUs(),
+                            edf.getLastPwmUs());
+        dataLog.write(csv);
+    }
 }
 
 static void printInspectLine(uint32_t nowUs)
@@ -382,6 +246,22 @@ static void handleSerialCommands()
 
     const int ch = Serial.read();
 
+    if (serialMode == SerialMode::Pick) {
+        if (ch == 'f') {
+            wayfinder.setMode(Wayfinder::Mode::Flight);
+            serialMode = SerialMode::Main;
+            Serial.println("wayfinder: flight  (w = start)");
+        } else if (ch == 'a') {
+            wayfinder.setMode(Wayfinder::Mode::AttitudeTest);
+            serialMode = SerialMode::Main;
+            Serial.println("wayfinder: attitude test  (w = start)");
+        } else if (ch == 'm') {
+            serialMode = SerialMode::Main;
+            Serial.println("mode: main");
+        }
+        return;
+    }
+
     switch (ch) {
         case 'k':
             if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
@@ -406,7 +286,10 @@ static void handleSerialCommands()
             break;
 
         case 'e':
-            if (serialMode == SerialMode::Waypoint) abortWaypointMission();
+            if (serialMode == SerialMode::Waypoint) {
+                wayfinder.abort();
+                dataLog.close();
+            }
             if (serialMode == SerialMode::Servo || serialMode == SerialMode::Dance) {
                 parkGimbals();
             }
@@ -415,11 +298,31 @@ static void handleSerialCommands()
             Serial.println("mode: edf  0 = off  1-6 = 10-60 N  m = main");
             break;
 
+        case 'n':
+            if (serialMode == SerialMode::Waypoint) {
+                wayfinder.abort();
+                dataLog.close();
+            }
+            if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
+            serialMode = SerialMode::Pick;
+            Serial.println("wayfinder mode:  f = flight  a = attitude test  m = back");
+            break;
+
         case 'w':
             if (serialMode == SerialMode::Edf) setEdfTestThrust(0.0f);
             serialMode = SerialMode::Waypoint;
-            startWaypointMission();
-            Serial.println("mode: waypoint  (m = abort)");
+            wayfinder.start(lidar.getZ());
+            dataLog.open(wayfinder.mode() == Wayfinder::Mode::AttitudeTest ? "ATT" : "FLT");
+            if (dataLog.isOpen()) {
+                dataLog.write(Wayfinder::csvHeader());
+                Serial.print("log: ");
+                Serial.println(dataLog.fileName());
+            } else {
+                Serial.println("log: no SD");
+            }
+            Serial.println(wayfinder.mode() == Wayfinder::Mode::AttitudeTest
+                ? "mode: attitude test  (m = abort)"
+                : "mode: waypoint  (m = abort)");
             break;
 
         case 'm':
@@ -427,13 +330,14 @@ static void handleSerialCommands()
                 parkGimbals();
             }
             if (serialMode == SerialMode::Waypoint) {
-                abortWaypointMission();
+                wayfinder.abort();
             }
+            dataLog.close();
             actuators.disarm();
             rcs.neutral();
             edf.writeRaw(cfg::edf::OFF_US);
             serialMode = SerialMode::Main;
-            Serial.println("mode: main  (k = inspect  c = servo  d = dance  e = edf  w = waypoint)");
+            Serial.println("mode: main  (k = inspect  c = servo  d = dance  e = edf  n = wayfinder  w = start)");
             break;
 
         case 's':
@@ -485,7 +389,10 @@ void setup()
     Serial.print("  imu   "); Serial.println(imu.isInitialized());
     Serial.print("  lidar "); Serial.println(lidar.isInitialized());
     Serial.print("  flow  "); Serial.println(flow.isInitialized());
-    Serial.println("k = inspect   c = servo   d = dance   e = edf   w = waypoint   m = main");
+    Serial.print("sd: ");
+    if (!cfg::log::SD_ENABLE) Serial.println("disabled");
+    else Serial.println(dataLog.begin() ? "ready" : "NONE");
+    Serial.println("k = inspect   c = servo   d = dance   e = edf   n = wayfinder   w = start   m = main");
 
     estimator.reset();
     actuators.safeAll();
@@ -513,16 +420,7 @@ void loop()
     estimator.update(sensors.getFrame());
 
     const StateEstimate& state = estimator.getState();
-    if (serialMode == SerialMode::Waypoint) serviceWaypoint(state);
-
-    if (serialMode == SerialMode::Waypoint && !landingConfirmed) {
-        position.setReference(wp.x_m, wp.y_m);
-        const AttitudeSetpoint attSp = position.update(
-            state.x_m, state.y_m, state.vx_mps, state.vy_mps);
-        attitude.setRollRef(attSp.roll_rad);
-        attitude.setPitchRef(attSp.pitch_rad);
-        attitude.setZRef(wp.alt_m);
-    }
+    if (serialMode == SerialMode::Waypoint) wayfinder.update(state);
 
     const ImuData& att = imu.getData();
     const float yawForCtrl = (serialMode == SerialMode::Waypoint)
@@ -535,14 +433,15 @@ void loop()
 
     // Servo/dance own the gimbals. After LAND, keep the EDF on the off pulse
     // every tick so the LQR hover feedforward cannot spin it back up.
-    if (landingConfirmed) {
+    if (wayfinder.landingConfirmed()) {
         edf.writeRaw(cfg::edf::OFF_US);
         rcs.neutral();
         gimbalX.neutral();
         gimbalY.neutral();
     } else if (serialMode == SerialMode::Waypoint && actuators.isArmed()) {
         actuators.setGimbal(cmd.gimbalY_deg, cmd.gimbalX_deg);
-        actuators.setYawTorque(cmd.yawTorque_Nm);
+        if (wayfinder.driveRcs()) actuators.setYawTorque(cmd.yawTorque_Nm);
+        else rcs.neutral();
         actuators.setThrust(cmd.thrust_N);
     } else if (serialMode == SerialMode::Edf) {
         rcs.neutral();
