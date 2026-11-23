@@ -380,15 +380,17 @@ namespace ctrl {
     constexpr int NX = 8;
     constexpr int NU = 4;
 
-    constexpr float K_ROLL  = 0.3700f;
+    constexpr float K_ROLL  = 2.3094f;
     constexpr float K_PITCH = K_ROLL;
     // constexpr float K_YAW   = 0.0316f;
-    constexpr float K_YAW   = -0.3516f;
-    constexpr float K_GX    = 0.1240f;
+    constexpr float K_YAW   = -0.9275f;
+    constexpr float K_GX    = 0.8224f;
     constexpr float K_GY    = K_GX;
-    constexpr float K_GZ    = -0.1561f;
-    constexpr float K_Z     = 3.1000f;
-    constexpr float K_VZ    = 8.6942f;
+    constexpr float K_GZ    = -0.6744f;
+    constexpr float K_Z     = 10.1000f;
+    // constexpr float K_Z     = 71.7000f;
+    constexpr float K_VZ    = 30.6942f;
+    // constexpr float K_VZ    = 75.9242f;
 
     // Output limits. Aliases, so the controller and the actuator physically
     // cannot clamp to different numbers.
@@ -413,11 +415,11 @@ namespace ctrl {
     // Outer position LQR (V0.1 K_pos). State [x, y, vx, vy, xint, yint].
     // Output is attitude setpoints in radians: roll from y, pitch from x.
     namespace pos {
-        constexpr float K_Y    = -0.100031f;
-        constexpr float K_VY   = -0.1400f;
+        constexpr float K_Y    = -0.2236f;
+        constexpr float K_VY   = -0.2600f;
         constexpr float K_YINT = -0.05000f;
-        constexpr float K_X    =  0.100031f;
-        constexpr float K_VX   =  0.1400f;
+        constexpr float K_X    =  0.2236f;
+        constexpr float K_VX   =  0.26100f;
         constexpr float K_XINT =  0.05000f;
         constexpr float INT_LIM_M     = 0.35f;
         constexpr float MAX_ATT_DEG   = 10.0f;

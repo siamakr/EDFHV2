@@ -402,8 +402,6 @@ void setup()
 // ─────────────────────────────────────────────────────────────────────────────
 void loop()
 {
-    // V0.1: sample the BNO on every pass, before anything else. A Serial
-    // print here will stall this and freeze the attitude.
     imu.sample();
 
     const uint32_t now = micros();
